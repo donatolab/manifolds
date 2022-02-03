@@ -4,7 +4,7 @@ from tqdm import trange, tqdm
 from scipy.signal import butter, lfilter, freqz, filtfilt
 import matplotlib.pyplot as plt
 # from tsnecuda import TSNE
-import umap
+# import umap
 from sklearn.decomposition import PCA
 import pickle as pk
 import scipy
