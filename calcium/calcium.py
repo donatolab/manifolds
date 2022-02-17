@@ -287,6 +287,21 @@ class Calcium():
         ax.set_xticks([])
         ax.set_ylim(0,bn.shape[0])
 
+    def detrend(self, traces):
+        #import scipy.signal, signal.detrend
+        traces_out = traces.copy()
+        for k in trange(traces.shape[0], desc='detrending data'):
+            #
+            temp = traces[k]
+
+            #
+            temp =  scipy.signal.detrend(temp)
+
+            traces_out[k] = temp
+
+        #
+        return traces_out
+
 
     def low_pass_filter(self, traces):
         #
@@ -440,16 +455,26 @@ class Calcium():
 
 
             #
-            self.F_filtered = self.low_pass_filter(self.F)
+            if False:
+                # self.F_filtered = self.band_pass_filter(self.F)  # This generates lots of butterworth filter artifacts
+                self.F_filtered = self.low_pass_filter(self.F)
+                # remove median
+                self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
+            else:
+                self.F_detrend = self.detrend(self.F)
 
-            #self.F_filtered = self.band_pass_filter(self.F)  # This has too many artifacts
-            self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
+                # smooth data before processing
+                self.F_filtered = self.low_pass_filter(self.F_detrend)
+
+                # remove median
+                self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
 
             ####################################################
             ###### BINARIZE FILTERED FLUORESCENCE ONPHASE ######
             ####################################################
             stds = np.ones(self.F_filtered.shape[0])+self.std_global
-            #print (" std global: ", stds, " vs std local ", np.std(self.F))
+            #if self.verbose:
+            #    print (" std global: ", stds, " vs std local ", np.std(self.F))
 
             self.F_onphase_bin = self.binarize_onphase(self.F_filtered,
                                                        stds,
