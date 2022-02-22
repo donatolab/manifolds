@@ -92,6 +92,9 @@ class Calcium():
         self.parallel = True
         self.n_cores = 4
 
+        # check if some of the cells have 0-std in which case they should be removed
+        self.check_zero_cells = True
+
         # Oasis/spike parameters
         self.oasis_thresh_prefilter = 15                       # min oasis spike value that survives
         self.min_thresh_std_oasis = .1                          # upphase binarizatino step: min std for binarization of smoothed oasis curves
@@ -103,6 +106,7 @@ class Calcium():
         self.min_thresh_std_Fluorescence_upphase = 1.5         # upphase binarization step: min x std for binarization of Fluorescence events
         self.min_width_event_Fluorescence = 15
 
+        #
 
 
     #
@@ -152,7 +156,7 @@ class Calcium():
         ########### COMPUTE GLOBAL MEAN - REMOVE MEAN ###############
         #############################################################
 
-        self.std_global = self.compute_std_global(self.F)
+        std_global,_ = self.compute_std_global(self.F)
         if self.verbose:
             print ("  Fluorescence data loading information")
             print ("         sample rate: ", self.sample_rate, "hz")
@@ -163,15 +167,48 @@ class Calcium():
             #print ("         self.ops: ", self.ops.shape)
             print ("         self.spks (deconnvoved spikes): ", self.spks.shape)
             print ("         self.stat (footprints structure): ", self.stat.shape)
-            print ("         mean std over all cells : ", self.std_global)
+            print ("         mean std over all cells : ", std_global)
 
     def compute_std_global(self, F):
+        if self.verbose:
+            print ("computing std of global signal (finding max)")
+
+        #
         stds = np.std(F, axis=1)
+
+        # do a quick check for zero STD cells
+        if self.check_zero_cells:
+            idx = np.where(stds==0)[0]
+            if idx.shape[0]>0:
+                if self.verbose:
+                    print ("Found cells with 0 values (to be removed): ", idx.shape[0])
+                idx2 = np.where(stds>0)[0]
+                F = F[idx2]
+                stds = stds[idx2]
+
+                #
+                idx3 = np.where(self.iscell[:,0]==1)[0]
+                fname_out = os.path.join(self.data_dir,'iscell_all_good.npy')
+                np.save(fname_out, self.iscell[idx3][idx2])
+
+        #
         y = np.histogram(stds, bins=np.arange(0, 100, .5))
-        argmax = np.argmax(y[0])
+        #plt.plot(y[1][:-1],y[0])
+        #plt.show()
+
+        if False:
+            argmax = np.argmax(y[0])
+        else:
+            # use the cumulative histogram to find the mean of the distribution
+            cumsum = np.cumsum(y[0])
+            cumsum = cumsum/np.max(cumsum)
+            idx = np.where(cumsum>=0.5)[0]
+
+            # take the first bin at which cumusm is > 0.5
+            argmax = idx[0]
         std_global = y[1][argmax]
 
-        return std_global
+        return std_global, F
 
 
     def load_inscopix(self):
@@ -183,7 +220,7 @@ class Calcium():
         self.F_times = np.float32(data[2:, 0])
 
         #
-        self.std_global = self.compute_std_global(self.F)
+        self.std_global, _ = self.compute_std_global(self.F)
         if self.verbose:
             print ("cells: ", self.F.shape)
             print ("F times: ", self.F_times.shape)
@@ -461,25 +498,31 @@ class Calcium():
                 # remove median
                 self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
             else:
-                self.F_detrend = self.detrend(self.F)
+                #
+                self.F_filtered = self.detrend(self.F)
 
                 # smooth data before processing
-                self.F_filtered = self.low_pass_filter(self.F_detrend)
+                self.F_filtered = self.low_pass_filter(self.F_filtered)
 
-                # remove median
+                # remove
                 self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
 
             ####################################################
             ###### BINARIZE FILTERED FLUORESCENCE ONPHASE ######
             ####################################################
-            stds = np.ones(self.F_filtered.shape[0])+self.std_global
-            #if self.verbose:
-            #    print (" std global: ", stds, " vs std local ", np.std(self.F))
+            # compute global std on filtered/detrended signal
+            std_global, self.F_filtered = self.compute_std_global(self.F_filtered)
+
+            #
+            stds = np.ones(self.F_filtered.shape[0])+std_global
+            if self.verbose:
+                print (" std global: ", std_global)
 
             self.F_onphase_bin = self.binarize_onphase(self.F_filtered,
                                                        stds,
                                                        self.min_width_event_Fluorescence,
-                                                       self.min_thresh_std_Fluorescence_onphase)
+                                                       self.min_thresh_std_Fluorescence_onphase,
+                                                       'filtered fluorescence onphase')
 
             # detect onset of ONPHASE to ensure UPPHASES overlap at least in one location with ONPHASE
             def detect_onphase(traces):
@@ -510,9 +553,10 @@ class Calcium():
             self.F_upphase_bin = self.binarize_onphase(F_upphase,
                                                        stds,    # use the same std array as for full Fluorescence
                                                        self.min_width_event_Fluorescence//2,
-                                                       self.min_thresh_std_Fluorescence_upphase)
+                                                       self.min_thresh_std_Fluorescence_upphase,
+                                                       'filtered fluorescence upphase')
 
-            # make sure that upphase data has at least on the onphase start
+            # make sure that upphase data has at least one onphase start
             # some of the cells miss this
             for k in range(len(onphases)):
                 idx = np.int32(onphases[k])
@@ -522,7 +566,8 @@ class Calcium():
             ############################################################
             ################## THRESHOLD RAW OASIS #####################
             ############################################################
-            try:
+            #try:
+            if False:
                 for k in range(self.spks.shape[0]):
                     # idx = np.where(c.spks_filtered[k]<stds[k]*1.0)[0]
                     idx = np.where(self.spks[k] < self.oasis_thresh_prefilter)[0]
@@ -570,8 +615,9 @@ class Calcium():
                 ############################################################
                 self.spks_smooth_bin = self.scale_binarized(self.spks_upphase_bin,
                                                              self.spks)
-            except:
-                print("   spks not available for dataset, to add it later... ")
+            else:
+            #except:
+                print("   Oasis based binarization skipped by default ... ")
                 self.spks = np.nan
                 self.spks_smooth_bin = np.nan
                 self.spks_upphase_bin = np.nan
@@ -735,7 +781,8 @@ class Calcium():
                          traces,
                          val_scale,
                          min_width_event,
-                         min_thresh_std):
+                         min_thresh_std,
+                         text=''):
         '''
            Function that converts continuous float value traces to
            zeros and ones based on some threshold
@@ -749,7 +796,7 @@ class Calcium():
         traces_bin = traces.copy()
 
         #
-        for k in trange(traces.shape[0], desc='binarizing continuous traces'):
+        for k in trange(traces.shape[0], desc='binarizing continuous traces '+text):
             temp = traces[k].copy()
 
             # find threshold crossings standard deviation based
