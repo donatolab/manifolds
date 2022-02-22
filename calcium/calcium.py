@@ -366,20 +366,20 @@ class Calcium():
         for k in trange(traces.shape[0], desc='model filter: remove linear trends up/down'):
             #
             temp = traces[k]
-            if k==0:
-                plt.plot(t,temp,c='blue')
+            #if k==0:
+            #    plt.plot(t,temp,c='blue')
 
             std = np.std(temp)
             idx = np.where(np.abs(temp)>=(1*std))[0]
-            
+
             temp[idx] = np.median(temp)
 
             #
             z = np.polyfit(t, temp, 1)
             p = np.poly1d(z)
-            if k==0:
-                plt.plot(t,p(t),c='black')
-                plt.plot(t,temp, c='red')
+            #if k==0:
+            #    plt.plot(t,p(t),c='black')
+            #    plt.plot(t,temp, c='red')
 
             traces_out[k] = traces_out[k] - p(t)
 

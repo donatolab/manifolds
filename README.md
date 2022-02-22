@@ -15,24 +15,26 @@ conda create -n manifolds python=3.8
 
 conda activate manifolds
 
-3. Install depencies:
+3. Install dependencies (might have to do them 1 at a time; eventually will have a script for this)
 
-pip install matplotlib, os, numpy, scipy, tqdm, sklearn, pickle, parmap, networkx, pandas, cv2
+pip install: matplotlib, os, numpy, scipy, tqdm, sklearn, pickle, parmap, networkx, pandas, cv2
 
 4.  Install jupyter notebook 
 
 conda install -c anaconda jupyter
 
-5.  Start jupyer notebook
+5. Download and unzip the Donatolab binarization repo (https://github.com/donatolab/manifolds, click onthe green "Code" button)
+
+6. Start jupyer notebook by typing it in at the command line
 
 jupyter notebook
-
-6.  Navigate to the folder and click on this file to start the jupyter notebook:
+ 
+7. Navigate to the folder where the code unzipped and click on this file to start the jupyter notebook:
 
 "Binarize_Suite2p_Inscopix.ipynb" 
 
-7.  Run the first cell and then input the location of your suite2p folder in 2nd cell. Run the rest of the notebook.
+8.  Run the first cell and then input the location of your suite2p folder in 2nd cell. Run the rest of the notebook.
 
-8.  The code will save 2 files: binarized_traces.npz (a python numpy file) and binarized_traces.mat (a matlab file).
+9.  The code will save 2 files: binarized_traces.npz (a python numpy file) and binarized_traces.mat (a matlab file).
 
-9.  (Optional) You can then use the last cell to visualize the traces and binarized versions for any specific cell. 
+10(Optional) You can then use the last cell to visualize the traces and binarized versions for any specific cell. 
