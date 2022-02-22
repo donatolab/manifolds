@@ -15,6 +15,7 @@ import networkx as nx
 import sklearn
 import pandas as pd
 import cv2
+from scipy.signal import butter, sosfilt, sosfreqz
 
 #
 def butter_highpass(cutoff, fs, order=5):
@@ -42,18 +43,18 @@ def butter_lowpass_filter(data, cutoff, fs, order=5):
     y = filtfilt(b, a, data)
     return y
 
-
 def butter_bandpass(lowcut, highcut, fs, order=5):
     nyq = 0.5 * fs
     low = lowcut / nyq
     high = highcut / nyq
-    b, a = butter(order, [low, high], btype='band')
-    return b, a
+    sos = butter(order, [low, high],analog=False, btype='band', output='sos')
+    #b, a = scipy.signal.cheby1(order, [low, high], btype='band')
+    return sos
 
 
 def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-    y = filtfilt(b, a, data)
+    sos = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = sosfilt(sos, data)
     return y
 
 
@@ -107,7 +108,8 @@ class Calcium():
         self.min_width_event_Fluorescence = 15
 
         #
-
+        self.high_cutoff = 1
+        self.low_cutoff = 0.005
 
     #
     def load_calcium(self):
@@ -170,8 +172,8 @@ class Calcium():
             print ("         mean std over all cells : ", std_global)
 
     def compute_std_global(self, F):
-        if self.verbose:
-            print ("computing std of global signal (finding max)")
+        #if self.verbose:
+        #    print ("computing std of global signal (finding max)")
 
         #
         stds = np.std(F, axis=1)
@@ -331,13 +333,77 @@ class Calcium():
             #
             temp = traces[k]
 
-            #
-            temp =  scipy.signal.detrend(temp)
+            temp =  scipy.signal.detrend(temp, type=='linear')
 
             traces_out[k] = temp
 
         #
         return traces_out
+
+    def high_pass_filter(self, traces):
+        #
+        traces_out = traces.copy()
+        for k in trange(traces.shape[0], desc='high pass filter'):
+            #
+            temp = traces[k]
+
+            #
+            temp = butter_highpass_filter(temp,
+                                         self.low_cutoff,
+                                         self.sample_rate,
+                                         order=1)
+            #
+            traces_out[k] = temp
+
+        #
+        return traces_out
+
+    def filter_model(self, traces):
+        traces_out = traces.copy()
+        t = np.arange(traces_out[0].shape[0])
+
+        #
+        for k in trange(traces.shape[0], desc='model filter: remove linear trends up/down'):
+            #
+            temp = traces[k]
+            if k==0:
+                plt.plot(t,temp,c='blue')
+
+            std = np.std(temp)
+            idx = np.where(np.abs(temp)>=(1*std))[0]
+            
+            temp[idx] = np.median(temp)
+
+            #
+            z = np.polyfit(t, temp, 1)
+            p = np.poly1d(z)
+            if k==0:
+                plt.plot(t,p(t),c='black')
+                plt.plot(t,temp, c='red')
+
+            traces_out[k] = traces_out[k] - p(t)
+
+        #
+        return traces_out
+
+    def median_filter(self,traces):
+
+        #
+        traces_out = traces.copy()
+
+
+        for k in trange(traces.shape[0], desc='median filter'):
+            #
+            temp = traces[k]
+
+            #
+            temp = scipy.signal.medfilt(temp, kernel_size=301)
+            #
+            traces_out[k] = temp
+
+        #
+        return traces_out
+
 
 
     def low_pass_filter(self, traces):
@@ -475,8 +541,7 @@ class Calcium():
             ####################################################
             ########### FILTER FLUROESCENCE TRACES #############
             ####################################################
-            self.high_cutoff = 1
-            self.low_cutoff = 0.1
+
 
             if self.verbose:
                 print ('')
@@ -499,13 +564,19 @@ class Calcium():
                 self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
             else:
                 #
-                self.F_filtered = self.detrend(self.F)
+                self.F_filtered = self.low_pass_filter(self.F)
+                self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
 
-                # smooth data before processing
-                self.F_filtered = self.low_pass_filter(self.F_filtered)
+                # self.F_filtered = self.high_pass_filter(self.F_filtered)
+                #self.F_filtered = self.band_pass_filter(self.F)
+                self.F_filtered = self.filter_model(self.F_filtered)
+                #self.F_filtered = self.detrend(self.F_filtered)
+                # self.F_filtered = self.median_filter(self.F_filtered)
+
+                # use wavelet transforms to remove lower frequency/trends
+                #self.F_filtered = self.wavelet_filter(self.F_filtered)
 
                 # remove
-                self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
 
             ####################################################
             ###### BINARIZE FILTERED FLUORESCENCE ONPHASE ######
@@ -720,6 +791,64 @@ class Calcium():
 
         return traces_out
 
+    def wavelet_filter(self, traces):
+        import pywt
+
+
+        def wavelet(data, wname="db2", maxlevel=6):
+
+            w = pywt.Wavelet('db3')
+            print ("w: ", w.filter_bank)
+
+            # decompose the signal:
+            c = pywt.wavedec(data, wname, level=maxlevel)
+            #print ("c: ", c)
+
+            # destroy the appropriate approximation coefficients:
+            c[0] = None
+
+            # reconstruct the signal:
+            data = pywt.waverec(c, wname)
+
+            return data
+
+        traces_out = traces.copy()
+        for k in trange(traces.shape[0], desc='wavelet filter'):
+            #
+            temp = traces[k]
+
+            temp2 = wavelet(temp)
+
+            temp = temp-temp2
+
+            #
+            traces_out[k] = temp
+
+        #
+        return traces_out
+
+
+
+
+    def chebyshev_filter(self, traces):
+        #
+        traces_out = traces.copy()
+        for k in trange(traces.shape[0], desc='band pass chebyshev filter'):
+            #
+            temp = traces[k]
+
+            #
+            temp = butter_bandpass_filter(temp,
+                                          self.low_cutoff,
+                                          self.high_cutoff,
+                                          self.sample_rate,
+                                          order=1)
+
+            #
+            traces_out[k] = temp
+
+        #
+        return traces_out
     #
     def band_pass_filter(self, traces):
 
