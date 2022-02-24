@@ -183,15 +183,24 @@ class Calcium():
             idx = np.where(stds==0)[0]
             if idx.shape[0]>0:
                 if self.verbose:
-                    print ("Found cells with 0 values (to be removed): ", idx.shape[0])
+                    print ("WARNING ***** Found cells with 0-[Ca] traces : ", idx.shape[0])
                 idx2 = np.where(stds>0)[0]
-                F = F[idx2]
+
+                # DO NOT ERASE CELLS
+                # F = F[idx2]
                 stds = stds[idx2]
 
                 #
-                idx3 = np.where(self.iscell[:,0]==1)[0]
-                fname_out = os.path.join(self.data_dir,'iscell_all_good.npy')
-                np.save(fname_out, self.iscell[idx3][idx2])
+                # idx3 = np.where(self.iscell[:,0]==1)[0]
+                #
+                # #
+                # idx4 = np.where(stds==0)[0]
+                # iscell_allgood = self.iscell.copy()
+                # iscell_allgood[idx4]= 0
+                #
+                # #
+                # fname_out = os.path.join(self.data_dir,'iscell_all_good.npy')
+                # np.save(fname_out, self.iscell[idx3][idx2])
 
         #
         y = np.histogram(stds, bins=np.arange(0, 100, .5))
@@ -358,30 +367,119 @@ class Calcium():
         #
         return traces_out
 
+    def medfilt(self, x, k):
+        """Apply a length-k median filter to a 1D array x.
+        Boundaries are extended by repeating endpoints.
+        """
+        assert k % 2 == 1, "Median filter length must be odd."
+        assert x.ndim == 1, "Input must be one-dimensional."
+        k2 = (k - 1) // 2
+        y = np.zeros((len(x), k), dtype=x.dtype)
+        y[:, k2] = x
+        for i in range(k2):
+            j = k2 - i
+            y[j:, i] = x[:-j]
+            y[:j, i] = x[0]
+            y[:-j, -(i + 1)] = x[j:]
+            y[-j:, -(i + 1)] = x[-1]
+        return np.median(y, axis=1)
+
     def filter_model(self, traces):
         traces_out = traces.copy()
-        t = np.arange(traces_out[0].shape[0])
-
+        t = np.arange(traces[0].shape[0])
+        #print ("... TODO: automate the polynomial fit search using RMS optimization?!...")
         #
-        for k in trange(traces.shape[0], desc='model filter: remove linear trends up/down'):
+        for k in trange(traces.shape[0], desc='model filter: remove bleaching or trends'):
             #
             temp = traces[k]
-            #if k==0:
-            #    plt.plot(t,temp,c='blue')
+            if k==0:
+                plt.plot(t,temp,c='blue')
 
-            std = np.std(temp)
-            idx = np.where(np.abs(temp)>=(1*std))[0]
+            if False:
+                temp = butter_highpass_filter(temp,
+                                             0.01,
+                                             self.sample_rate,
+                                             order=5)
+                std = np.std(temp)
+                idx = np.where(temp>(std*.1))[0]
+                idx2 = np.where(temp<=(std*.1))[0]
+                temp [idx] = np.median(temp[idx2])
+                #temp =  scipy.signal.medfilt(temp, kernel_size=1501)#[source]
 
-            temp[idx] = np.median(temp)
+                if k==0:
+                    plt.plot(t, temp, c='green')
 
-            #
-            z = np.polyfit(t, temp, 1)
-            p = np.poly1d(z)
-            #if k==0:
-            #    plt.plot(t,p(t),c='black')
-            #    plt.plot(t,temp, c='red')
+                idx = np.where(np.abs(temp)<=(1*std))[0]
 
-            traces_out[k] = traces_out[k] - p(t)
+            if False:
+                temp = butter_lowpass_filter(temp,
+                                             0.01,
+                                             self.sample_rate,
+                                             order=5)
+                #std = np.std(temp)
+                #idx = np.where(temp>(std*1))[0]
+                #idx2 = np.where(temp<=(std*1))[0]
+                #temp [idx] = np.median(temp[idx2])
+                #
+                z=[1,2]
+                while z[0]>1E-8:
+                    z = np.polyfit(t, temp, 1)
+                    #print ("slopes: ", z)
+                    p = np.poly1d(z)
+
+                    temp = temp - p(t)
+
+            # just fit line to median of first 10k points and last 10k points
+            if self.detrend_model_order==1:
+
+                median01 = np.array([np.median(temp[:10000]),
+                                    np.median(temp[-10000:])])
+                #median2= temp[-10000:]
+                t01 = np.array([0,temp.shape[0]-1])
+                #print (t01, median01)
+                z = np.polyfit(t01, median01, 1)
+
+                p = np.poly1d(z)
+
+                temp = temp - p(t)
+                traces_out[k] = traces_out[k] - p(t)
+
+            if self.detrend_model_order==2:
+                #temp = butter_lowpass_filter(temp,
+                #                             0.01,
+                #                             self.sample_rate,
+                #                             order=5)
+
+
+                z = np.polyfit(t, temp, 2)
+
+                p = np.poly1d(z)
+
+                if k == 0:
+                    plt.plot(t, p(t), c='black')
+
+
+                traces_out[k] = traces_out[k] - p(t)
+
+            if self.detrend_model_order >2:
+                temp = butter_lowpass_filter(temp,
+                                            0.01,
+                                            self.sample_rate,
+                                            order=5)
+
+                z = np.polyfit(t, temp, self.detrend_model_order)
+
+                p = np.poly1d(z)
+
+                if k == 0:
+                    plt.plot(t, p(t), c='black')
+
+                traces_out[k] = traces_out[k] - p(t)
+
+            if k==0:
+                plt.plot(t,temp,c='blue')
+                plt.plot(t,p(t),c='red')
+
 
         #
         return traces_out
@@ -435,9 +533,13 @@ class Calcium():
             self.F_upphase_bin = data['F_upphase']
             self.spks = data['spks']
             self.spks_smooth_bin = data['spks_smooth_upphase']
+            self.detrend_model_order = data['detrend_model_order']
+            self.high_cutoff = data['high_cutoff']
+            self.low_cutoff = data['low_cutoff']
 
             # raw and filtered data;
             self.F_filtered = data['F_filtered']
+            self.F_processed = data['F_processed']
             self.spks_x_F = data['oasis_x_F']
 
             # parameters saved to file as dictionary
@@ -565,11 +667,17 @@ class Calcium():
             else:
                 #
                 self.F_filtered = self.low_pass_filter(self.F)
+                self.F_filtered_saved = self.F_filtered.copy()
                 self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
 
                 # self.F_filtered = self.high_pass_filter(self.F_filtered)
                 #self.F_filtered = self.band_pass_filter(self.F)
                 self.F_filtered = self.filter_model(self.F_filtered)
+
+                # remove baseline again
+                self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
+
+
                 #self.F_filtered = self.detrend(self.F_filtered)
                 # self.F_filtered = self.median_filter(self.F_filtered)
 
@@ -586,9 +694,8 @@ class Calcium():
 
             #
             stds = np.ones(self.F_filtered.shape[0])+std_global
-            if self.verbose:
-                print (" std global: ", std_global)
 
+            #
             self.F_onphase_bin = self.binarize_onphase(self.F_filtered,
                                                        stds,
                                                        self.min_width_event_Fluorescence,
@@ -699,13 +806,16 @@ class Calcium():
             if self.save_python:
                 np.savez(fname_out,
                      # binarization data
+                     F_filtered = self.F_filtered_saved,
+                     F_processed = self.F_filtered,
                      F_onphase=self.F_onphase_bin,
                      F_upphase=self.F_upphase_bin,
                      spks=self.spks,
                      spks_smooth_upphase=self.spks_smooth_bin,
+                     high_cutoff = self.high_cutoff,
+                     low_cutoff = self.low_cutoff,
+                     detrend_model_order= self.detrend_model_order,
 
-                     # raw and filtered data;
-                     F_filtered = self.F_filtered,
                      oasis_x_F = self.spks_x_F,
 
                      # parameters saved to file as dictionary
