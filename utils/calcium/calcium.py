@@ -105,7 +105,8 @@ class Calcium():
         # Fluorescence parameters
         self.min_thresh_std_Fluorescence_onphase = 1.5         # onphase binarization step: min x std for binarization of Fluorescence events
         self.min_thresh_std_Fluorescence_upphase = 1.5         # upphase binarization step: min x std for binarization of Fluorescence events
-        self.min_width_event_Fluorescence = 15
+        self.min_width_event_onphase = self.sample_rate//2
+        self.min_width_event_upphase = self.sample_rate//4
 
         #
         self.high_cutoff = 1
@@ -265,6 +266,35 @@ class Calcium():
 
         return traces_out
 
+    def plot_cell_binarization(self, cell_id, scale):
+
+        ####################################################
+        fig = plt.figure()
+        t=np.arange(self.F_filtered.shape[1])/self.sample_rate
+
+    #     if False:
+    #         for k in range(800,848,1):
+    #             plt.plot(t,self.F_filtered[k]/scale+k*1, linewidth=3, label='filtered', alpha=.8)
+
+    #     else:
+        plt.plot(t,(self.F_filtered[cell_id]-np.median(self.F_filtered[cell_id]))/scale, linewidth=3, label='filtered', alpha=.8,
+                c='black')
+        plt.plot(t,self.F_processed[cell_id]/scale, linewidth=3, label='filtered', alpha=.8,
+                c='blue')
+        plt.plot(t,self.F_onphase_bin[cell_id]*.9, linewidth=3, label='onphase', alpha=.4,
+                c='orange')
+        plt.plot(t,self.F_upphase_bin[cell_id], linewidth=3, label='upphase', alpha=.4,
+                c='green')
+
+        plt.legend(fontsize=20)
+        plt.title("Cell: "+str(cell_id) + "\nSpike threshold: "+str(self.min_thresh_std_Fluorescence_upphase)+
+                  ", lowpass filter cutoff (hz): " +str(self.high_cutoff)+
+                  ", detrend polynomial model order: "+str(self.detrend_model_order))
+
+        plt.xlabel("Time (sec)")
+        plt.xlim(t[0], t[-1])
+        plt.show()
+    
     #
     def plot_traces(self, traces, ns,
                     label='',
@@ -547,7 +577,8 @@ class Calcium():
             self.min_thresh_std_oasis = data['min_thresh_std_oasis']
             self.min_thresh_std_Fluorescence_onphase = data['min_thresh_std_Fluorescence_onphase']
             self.min_thresh_std_Fluorescence_upphase = data['min_thresh_std_Fluorescence_upphase']
-            self.min_width_event_Fluorescence = data['min_width_event_Fluorescence']
+            self.min_width_event_onphase = data['min_width_event_onphase']
+            self.min_width_event_upphase = data['min_width_event_upphase']
             self.min_width_event_oasis = data['min_width_event_oasis']
             self.min_event_amplitude = data['min_event_amplitude']
 
@@ -632,6 +663,35 @@ class Calcium():
         self.footprints_bin = imgs_bin
 
 
+    def show_rasters(self):
+
+        idx = np.where(self.F_upphase_bin==1)
+
+        # 
+        img = np.zeros((self.F_onphase_bin.shape[0], 
+                        self.F_onphase_bin.shape[1]))
+
+        #
+        for k in range(idx[0].shape[0]):
+            img[idx[0][k],idx[1][k]-5: idx[1][k]+5]=1
+
+        #
+        plt.figure()
+        plt.imshow(img, aspect='auto',
+                   cmap='Greys',
+                   extent=[0,img.shape[1]/self.sample_rate,
+                          img.shape[0]-0.5,-0.5],
+
+                  interpolation='none')
+        plt.ylabel("Neuron ID (ordered by SNR by Suite2p)")
+        plt.xlabel("Time (sec)")
+        plt.title("Spike threshold: "+str(self.min_thresh_std_Fluorescence_upphase)+
+                  ", lowpass filter cutoff (hz): " +str(self.high_cutoff)+
+                  ", detrend polynomial model order: "+str(self.detrend_model_order))
+        plt.show()
+
+    
+
     def binarize_fluorescence(self):
 
         fname_out = os.path.join(self.data_dir,
@@ -653,7 +713,8 @@ class Calcium():
                 print ("        min_thresh_std_oasis: ",  self.min_thresh_std_oasis)
                 print ("        min_thresh_std_Fluorescence_onphase: ", self.min_thresh_std_Fluorescence_onphase)
                 print ("        min_thresh_std_Fluorescence_upphase: ", self.min_thresh_std_Fluorescence_upphase)
-                print ("        min_width_event_Fluorescence: ", self.min_width_event_Fluorescence)
+                print ("        min_width_event_onphase: ", self.min_width_event_onphase)
+                print ("        min_width_event_upphase: ", self.min_width_event_upphase)
                 print ("        min_width_event_oasis: ", self.min_width_event_oasis)
                 print ("        min_event_amplitude: ", self.min_event_amplitude)
 
@@ -693,12 +754,12 @@ class Calcium():
             std_global, self.F_filtered = self.compute_std_global(self.F_filtered)
 
             #
-            stds = np.ones(self.F_filtered.shape[0])+std_global
+            self.stds = np.zeros(self.F_filtered.shape[0])+std_global
 
             #
             self.F_onphase_bin = self.binarize_onphase(self.F_filtered,
-                                                       stds,
-                                                       self.min_width_event_Fluorescence,
+                                                       self.stds,
+                                                       self.min_width_event_onphase,
                                                        self.min_thresh_std_Fluorescence_onphase,
                                                        'filtered fluorescence onphase')
 
@@ -720,17 +781,17 @@ class Calcium():
             ####################################################
             # THIS STEP SOMETIMES MISSES ONPHASE COMPLETELY DUE TO GRADIENT;
             # So we minimally add onphases from above
-            der = np.float32(np.gradient(self.F_filtered,
+            self.der = np.float32(np.gradient(self.F_filtered,
                                          axis=1))
-            min_slope = 0
-            idx = np.where(der <= min_slope)
+            self.der_min_slope = 0
+            idx = np.where(self.der <= self.der_min_slope)
             F_upphase = self.F_filtered.copy()
             F_upphase[idx]=0
 
             #
             self.F_upphase_bin = self.binarize_onphase(F_upphase,
-                                                       stds,    # use the same std array as for full Fluorescence
-                                                       self.min_width_event_Fluorescence//2,
+                                                       self.stds,    # use the same std array as for full Fluorescence
+                                                       self.min_width_event_upphase,
                                                        self.min_thresh_std_Fluorescence_upphase,
                                                        'filtered fluorescence upphase')
 
@@ -747,7 +808,7 @@ class Calcium():
             #try:
             if False:
                 for k in range(self.spks.shape[0]):
-                    # idx = np.where(c.spks_filtered[k]<stds[k]*1.0)[0]
+                    # idx = np.where(c.spks_filtered[k]<self.stds[k]*1.0)[0]
                     idx = np.where(self.spks[k] < self.oasis_thresh_prefilter)[0]
                     self.spks[k, idx] = 0
 
@@ -810,6 +871,9 @@ class Calcium():
                      F_processed = self.F_filtered,
                      F_onphase=self.F_onphase_bin,
                      F_upphase=self.F_upphase_bin,
+                     stds = self.stds,
+                     derivative = self.der,
+                     der_min_slope = self.der_min_slope,
                      spks=self.spks,
                      spks_smooth_upphase=self.spks_smooth_bin,
                      high_cutoff = self.high_cutoff,
@@ -823,7 +887,8 @@ class Calcium():
                      min_thresh_std_oasis=self.min_thresh_std_oasis,
                      min_thresh_std_Fluorescence_onphase=self.min_thresh_std_Fluorescence_onphase,
                      min_thresh_std_Fluorescence_upphase=self.min_thresh_std_Fluorescence_upphase,
-                     min_width_event_Fluorescence=self.min_width_event_Fluorescence,
+                     min_width_event_onphase=self.min_width_event_onphase,
+                     min_width_event_upphase=self.min_width_event_upphase,
                      min_width_event_oasis=self.min_width_event_oasis,
                      min_event_amplitude=self.min_event_amplitude,
                      )
@@ -838,8 +903,10 @@ class Calcium():
                       "F_upphase":self.F_upphase_bin,
                       "spks":self.spks,
                       "spks_smooth_upphase":self.spks_smooth_bin,
-
-
+                      "stds": self.stds,
+                      "derivative":  self.der,
+                      "der_min_slope": self.der_min_slope,
+                      
                      # raw and filtered data;
                      "F_filtered":self.F_filtered,
                      "oasis_x_F": self.spks_x_F,
@@ -847,9 +914,10 @@ class Calcium():
                      # parameters saved to file as dictionary
                      "oasis_thresh_prefilter":self.oasis_thresh_prefilter,
                      "min_thresh_std_oasis":self.min_thresh_std_oasis,
-                     "min_thresh_std_Fluorescence_onphase":self.min_thresh_std_Fluorescence_onphase,
-                     "min_thresh_std_Fluorescence_upphase":self.min_thresh_std_Fluorescence_upphase,
-                     "min_width_event_Fluorescence":self.min_width_event_Fluorescence,
+                     "min_thresh_std_Fluorescence_onphase":self.min_thresh_std_onphase,
+                     "min_thresh_std_Fluorescence_upphase":self.min_thresh_std_upphase,
+                     "min_width_event_onphase":self.min_width_event_onphase,
+                     "min_width_event_upphase":self.min_width_event_upphase,
                      "min_width_event_oasis":self.min_width_event_oasis,
                      "min_event_amplitude":self.min_event_amplitude,
                       }
