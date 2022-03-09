@@ -103,8 +103,8 @@ class Calcium():
         self.min_event_amplitude = 1                           # oasis scaled spikes: float point scaling boolean events; minimum amplitude required (removes very small amplitude events)
 
         # Fluorescence parameters
-        self.min_thresh_std_Fluorescence_onphase = 1.5         # onphase binarization step: min x std for binarization of Fluorescence events
-        self.min_thresh_std_Fluorescence_upphase = 1.5         # upphase binarization step: min x std for binarization of Fluorescence events
+        self.min_thresh_std_onphase = 1.5         # onphase binarization step: min x std for binarization of Fluorescence events
+        self.min_thresh_std_upphase = 1.5         # upphase binarization step: min x std for binarization of Fluorescence events
         self.min_width_event_onphase = self.sample_rate//2
         self.min_width_event_upphase = self.sample_rate//4
 
@@ -287,7 +287,7 @@ class Calcium():
                 c='green')
 
         plt.legend(fontsize=20)
-        plt.title("Cell: "+str(cell_id) + "\nSpike threshold: "+str(self.min_thresh_std_Fluorescence_upphase)+
+        plt.title("Cell: "+str(cell_id) + "\nSpike threshold: "+str(self.min_thresh_std_upphase)+
                   ", lowpass filter cutoff (hz): " +str(self.high_cutoff)+
                   ", detrend polynomial model order: "+str(self.detrend_model_order))
 
@@ -575,8 +575,8 @@ class Calcium():
             # parameters saved to file as dictionary
             self.oasis_thresh_prefilter = data['oasis_thresh_prefilter']
             self.min_thresh_std_oasis = data['min_thresh_std_oasis']
-            self.min_thresh_std_Fluorescence_onphase = data['min_thresh_std_Fluorescence_onphase']
-            self.min_thresh_std_Fluorescence_upphase = data['min_thresh_std_Fluorescence_upphase']
+            self.min_thresh_std_onphase = data['min_thresh_std_onphase']
+            self.min_thresh_std_upphase = data['min_thresh_std_upphase']
             self.min_width_event_onphase = data['min_width_event_onphase']
             self.min_width_event_upphase = data['min_width_event_upphase']
             self.min_width_event_oasis = data['min_width_event_oasis']
@@ -685,7 +685,7 @@ class Calcium():
                   interpolation='none')
         plt.ylabel("Neuron ID (ordered by SNR by Suite2p)")
         plt.xlabel("Time (sec)")
-        plt.title("Spike threshold: "+str(self.min_thresh_std_Fluorescence_upphase)+
+        plt.title("Spike threshold: "+str(self.min_thresh_std_upphase)+
                   ", lowpass filter cutoff (hz): " +str(self.high_cutoff)+
                   ", detrend polynomial model order: "+str(self.detrend_model_order))
         plt.show()
@@ -711,8 +711,8 @@ class Calcium():
                 print ("        low pass filter low cuttoff: ", self.high_cutoff, "hz")
                 print ("        oasis_thresh_prefilter: ", self.oasis_thresh_prefilter)
                 print ("        min_thresh_std_oasis: ",  self.min_thresh_std_oasis)
-                print ("        min_thresh_std_Fluorescence_onphase: ", self.min_thresh_std_Fluorescence_onphase)
-                print ("        min_thresh_std_Fluorescence_upphase: ", self.min_thresh_std_Fluorescence_upphase)
+                print ("        min_thresh_std_onphase: ", self.min_thresh_std_onphase)
+                print ("        min_thresh_std_upphase: ", self.min_thresh_std_upphase)
                 print ("        min_width_event_onphase: ", self.min_width_event_onphase)
                 print ("        min_width_event_upphase: ", self.min_width_event_upphase)
                 print ("        min_width_event_oasis: ", self.min_width_event_oasis)
@@ -760,7 +760,7 @@ class Calcium():
             self.F_onphase_bin = self.binarize_onphase(self.F_filtered,
                                                        self.stds,
                                                        self.min_width_event_onphase,
-                                                       self.min_thresh_std_Fluorescence_onphase,
+                                                       self.min_thresh_std_onphase,
                                                        'filtered fluorescence onphase')
 
             # detect onset of ONPHASE to ensure UPPHASES overlap at least in one location with ONPHASE
@@ -792,7 +792,7 @@ class Calcium():
             self.F_upphase_bin = self.binarize_onphase(F_upphase,
                                                        self.stds,    # use the same std array as for full Fluorescence
                                                        self.min_width_event_upphase,
-                                                       self.min_thresh_std_Fluorescence_upphase,
+                                                       self.min_thresh_std_upphase,
                                                        'filtered fluorescence upphase')
 
             # make sure that upphase data has at least one onphase start
@@ -885,8 +885,8 @@ class Calcium():
                      # parameters saved to file as dictionary
                      oasis_thresh_prefilter=self.oasis_thresh_prefilter,
                      min_thresh_std_oasis=self.min_thresh_std_oasis,
-                     min_thresh_std_Fluorescence_onphase=self.min_thresh_std_Fluorescence_onphase,
-                     min_thresh_std_Fluorescence_upphase=self.min_thresh_std_Fluorescence_upphase,
+                     min_thresh_std_onphase=self.min_thresh_std_onphase,
+                     min_thresh_std_upphase=self.min_thresh_std_upphase,
                      min_width_event_onphase=self.min_width_event_onphase,
                      min_width_event_upphase=self.min_width_event_upphase,
                      min_width_event_oasis=self.min_width_event_oasis,
@@ -914,8 +914,8 @@ class Calcium():
                      # parameters saved to file as dictionary
                      "oasis_thresh_prefilter":self.oasis_thresh_prefilter,
                      "min_thresh_std_oasis":self.min_thresh_std_oasis,
-                     "min_thresh_std_Fluorescence_onphase":self.min_thresh_std_onphase,
-                     "min_thresh_std_Fluorescence_upphase":self.min_thresh_std_upphase,
+                     "min_thresh_std_onphase":self.min_thresh_std_onphase,
+                     "min_thresh_std_uphase":self.min_thresh_std_upphase,
                      "min_width_event_onphase":self.min_width_event_onphase,
                      "min_width_event_upphase":self.min_width_event_upphase,
                      "min_width_event_oasis":self.min_width_event_oasis,
