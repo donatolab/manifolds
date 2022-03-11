@@ -17,6 +17,13 @@ import pandas as pd
 import cv2
 from scipy.signal import butter, sosfilt, sosfreqz
 
+import sys
+module_path = os.path.abspath(os.path.join('..'))
+sys.path.append(module_path)
+
+from utils.wheel import wheel
+
+
 #
 def butter_highpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
@@ -117,11 +124,26 @@ class Calcium():
 
         self.calcium_data = np.load(self.fname)
 
+    def fix_data_dir(self):
+        
+        # check if data structured as in suite2p output
+        if os.path.exists(os.path.join(self.data_dir,
+                                       'suite2p',
+                                       'plane0')):
+            self.data_dir = os.path.join(self.data_dir,
+                                         "suite2p", 
+                                         "plane0")  
+        
     #
     def load_suite2p(self):
         print ('')
         print ('')
-
+        suffix1 = 'suite2p'
+        suffix2 = 'plane0'
+        
+        self.fix_data_dir()
+        
+        #
         self.F = np.load(os.path.join(self.data_dir,
                                       'F.npy'), allow_pickle=True)
         self.Fneu = np.load(os.path.join(self.data_dir,
@@ -166,8 +188,7 @@ class Calcium():
             print ("         self.F (fluorescence): ", self.F.shape)
             print ("         self.Fneu (neuropile): ", self.Fneu.shape)
             print ("         self.iscell (Suite2p cell classifier output): ", self.iscell.shape)
-            print ("         # of good cells: ", np.where(self.iscell==1)[0].shape)
-            #print ("         self.ops: ", self.ops.shape)
+            print ("              of which number of good cells: ", np.where(self.iscell==1)[0].shape)
             print ("         self.spks (deconnvoved spikes): ", self.spks.shape)
             print ("         self.stat (footprints structure): ", self.stat.shape)
             print ("         mean std over all cells : ", std_global)
@@ -242,7 +263,7 @@ class Calcium():
     #
     def standardize(self, traces):
 
-        fname_out = os.path.join(self.root_dir,
+        fname_out = os.path.join(self.data_dir,
                                  'standardized.npy')
 
         if True:
@@ -265,6 +286,27 @@ class Calcium():
         #     traces_out = np.load(fname_out)
 
         return traces_out
+
+    def compute_SNR(self):
+        ''' NOTE: FUNCITON NOT USED FRO NOW
+            SUITE2P outputs cells in order of quality using much more complex classifiers than simple SNR/Skewness
+            - suggest using their order for now
+        
+        '''
+        print ("")
+        print ("")
+        print (" Computing SNR of good cells using raw unfileterd Fluorescence (for other options ping developer)")
+        
+        snrs = []
+        skews = []
+        median_to_peak = []
+        for k in range(self.F.shape[0]):
+            snrs.append(signaltonoise(self.F[k]))
+            skews.append(scipy.stats.skew(self.F[k]))
+                        
+        self.snrs = np.array(snrs)
+        self.skews = np.array(skews)
+
 
     def plot_cell_binarization(self, cell_id, scale):
 
@@ -422,8 +464,8 @@ class Calcium():
         for k in trange(traces.shape[0], desc='model filter: remove bleaching or trends'):
             #
             temp = traces[k]
-            if k==0:
-                plt.plot(t,temp,c='blue')
+            # if k==0:
+            #     plt.plot(t,temp,c='blue')
 
             if False:
                 temp = butter_highpass_filter(temp,
@@ -501,14 +543,14 @@ class Calcium():
 
                 p = np.poly1d(z)
 
-                if k == 0:
-                    plt.plot(t, p(t), c='black')
+                # if k == 0:
+                #     plt.plot(t, p(t), c='black')
 
                 traces_out[k] = traces_out[k] - p(t)
 
-            if k==0:
-                plt.plot(t,temp,c='blue')
-                plt.plot(t,p(t),c='red')
+            # if k==0:
+            #     plt.plot(t,temp,c='blue')
+            #     plt.plot(t,p(t),c='red')
 
 
         #
@@ -554,10 +596,13 @@ class Calcium():
 
     def load_binarization(self):
 
+        self.fix_data_dir()
+        
         #
-        fname_out = self.fname
-
-        if os.path.exists(fname_out) and self.recompute==False:
+        fname_out = os.path.join(self.data_dir,'binarized_traces.npz')
+        
+        #
+        if os.path.exists(fname_out) and self.recompute_binarization==False:
             data = np.load(fname_out, allow_pickle=True)
             self.F_onphase_bin = data['F_onphase']
             self.F_upphase_bin = data['F_upphase']
@@ -582,8 +627,9 @@ class Calcium():
             self.min_width_event_oasis = data['min_width_event_oasis']
             self.min_event_amplitude = data['min_event_amplitude']
 
-            print (self.F_filtered.shape)
-
+            if self.verbose:
+                print ("   todo: print binarization defaults...")
+            
         else:
             self.binarize_fluorescence()
 
@@ -698,7 +744,7 @@ class Calcium():
                                  'binarized_traces.npz'
                                  )
 
-        if os.path.exists(fname_out)==False or self.recompute:
+        if os.path.exists(fname_out)==False or self.recompute_binarization:
 
             ####################################################
             ########### FILTER FLUROESCENCE TRACES #############
@@ -1136,7 +1182,7 @@ class Calcium():
         #
     def binarize_derivative(self, traces, thresh=2):
 
-        fname_out = os.path.join(self.root_dir,
+        fname_out = os.path.join(self.data_dir,
                                  'binarized_derivative.npy')
         if True:
         # if os.path.exists(fname_out) == False:
@@ -1179,7 +1225,7 @@ class Calcium():
     #
     def binarize(self, traces, thresh = 2):
 
-        fname_out = os.path.join(self.root_dir,
+        fname_out = os.path.join(self.data_dir,
                                  'binarized.npy')
         if os.path.exists(fname_out)==False:
             traces_out = traces.copy()*0
@@ -1210,22 +1256,16 @@ class Calcium():
         return traces_out, traces_out_anti_aliased
 
 
-    def compute_PCA(self, X, suffix='', recompute=True, cell_randomization=False):
+    def compute_PCA(self, X, recompute=True):
         #
 
         # run PCA
 
-        fname_out = os.path.join(self.root_dir, self.animal_id,
-                                 self.session,
-                                 'suite2p','plane0', 'pca_'+suffix+'_random_'+
-                                   str(cell_randomization)+'.pkl')
+        fname_out = os.path.join(self.data_dir, 'pca.pkl')
 
         if os.path.exists(fname_out)==False or recompute:
-            print ("... running PCA ...")
             pca = PCA()
             X_pca = pca.fit_transform(X)
-
-
             pk.dump(pca, open(fname_out, "wb"))
 
             #
@@ -1242,9 +1282,8 @@ class Calcium():
 
     def compute_TSNE(self, X):
         #
-        #print(self.root_dir)
 
-        fname_out = os.path.join(self.root_dir, 'tsne.npz')
+        fname_out = os.path.join(self.data_dir, 'tsne.npz')
         #print ("Fname out: ", fname_out)
 
         try:
@@ -1275,7 +1314,6 @@ class Calcium():
 
     def compute_UMAP(self, X, n_components = 3, text=''):
         #
-        print(self.root_dir)
 
         fname_out = os.path.join(self.root_dir, text+'umap.npz')
 
@@ -1409,6 +1447,10 @@ class Calcium():
 
 
     def delete_duplicate_cells(self):
+        
+        
+        # delete multi node networks
+        
         from time import sleep
 
         a = nx.connected_components(self.G)
@@ -1431,6 +1473,8 @@ class Calcium():
             removed_cells = np.hstack(removed_cells)
         else:
             removed_cells = []
+            
+        # 
         clean_cells = np.delete(np.arange(self.F.shape[0]),
                               removed_cells)
         self.clean_cell_ids = clean_cells
@@ -1471,16 +1515,24 @@ class Calcium():
 
     def remove_duplicate_neurons(self):
 
-        # get pairwise distances between neuron centres; distsupper is zeroed out array
+        # turn off intrinsice parallization or this step goes too slow
+        os.environ['OPENBLAS_NUM_THREADS'] = '1'
+        os.environ['OMP_NUM_THREADS']= '1'
 
-        #if self.deduplication_method == 'centre_distance':
+        print (" ... deduplicating cells... (can take ~5 for ~1,000cells) ")
+
+        # if self.deduplication_method == 'centre_distance':
         self.dists, self.dists_upper = find_inter_cell_distance(self.footprints)
-        #elif self.deduplication_method == 'overlap':
+        # elif self.deduplication_method == 'overlap':
         self.df_overlaps = generate_cell_overlaps(self)
 
         # compute correlations between neurons
         rasters = self.F_filtered   # use fluorescence filtered traces
-        self.corrs = compute_correlations(rasters, self)
+        # self.corrs = compute_correlations(rasters, self)
+        self.corrs = compute_correlations_parallel(rasters, 
+                                                   self.data_dir, 
+                                                   self.n_cores,
+                                                   self.recompute_deduplication)
         self.corr_array = make_correlation_array(self.corrs, rasters)
 
         # find neurnos that are below threhsolds
@@ -1490,7 +1542,8 @@ class Calcium():
             self.candidate_neurons = self.find_candidate_neurons_overlaps()
 
 
-        # find connected neurons and remove singles
+        # find connected neurons
+        #      also reduce network pairs to single nodes
         self.make_correlated_neuron_graph()
 
         #
@@ -1625,6 +1678,37 @@ def array_row_intersection(a, b):
     return a[np.sum(np.cumsum(tmp, axis=0) * tmp == 1, axis=1).astype(bool)]
 
 
+#
+def find_overlaps2(ids, footprints, footprints_bin):
+    #
+    intersections = []
+    for k in ids:
+        temp1 = footprints[k]
+        idx1 = np.vstack(np.where(temp1 > 0)).T
+        temp1_bin = footprints_bin[k]
+        #
+        for p in range(k + 1, footprints.shape[0], 1):
+            temp2 = footprints[p]
+            idx2 = np.vstack(np.where(temp2 > 0)).T
+            temp2_bin = footprints_bin[p]
+            
+            if np.max(temp1_bin+temp2_bin)<2:
+                continue
+            
+            
+            #
+            res = array_row_intersection(idx1, idx2)
+
+            #
+            if len(res) > 0:
+                percent1 = res.shape[0] / idx1.shape[0]
+                percent2 = res.shape[0] / idx2.shape[0]
+                intersections.append([k, p, res.shape[0], percent1, percent2])
+    #
+    return intersections
+
+
+#
 def find_overlaps1(ids, footprints):
     #
     intersections = []
@@ -1685,7 +1769,7 @@ def make_overlap_database(res):
 #
 def find_inter_cell_distance(footprints):
     locations = []
-    for k in trange(footprints.shape[0], desc='finding medians'):
+    for k in range(footprints.shape[0]):
         temp = footprints[k]
         centre = np.median(np.vstack(np.where(temp > 0)).T, axis=0)
         locations.append(centre)
@@ -1702,19 +1786,64 @@ def find_inter_cell_distance(footprints):
     return dists, dists_upper
 
 
-#
-def compute_correlations(rasters, c):
-    fname_out = os.path.join(c.root_dir,
-                             c.animal_id,
-                             c.session,
-                             'suite2p',
-                             'plane0',
+def correlations_parallel(ids, rasters, subsample=5):
+        
+    corrs = []
+    for k in ids: #,desc='computing intercell correlation'):
+        temp1 = rasters[k][::5]
+        #
+        for p in range(rasters.shape[0]):
+            temp2 = rasters[p][::5]
+            corr = scipy.stats.pearsonr(temp1,
+                                        temp2)
+
+            corrs.append([k, p, corr[0], corr[1]])
+    
+    return corrs
+                
+def compute_correlations_parallel(rasters, 
+                                  data_dir, 
+                                  n_cores,
+                                  recompute_deduplication=False):
+    fname_out = os.path.join(data_dir,
                              'cell_correlations.npy'
                              )
-    if os.path.exists(fname_out) == False:
+    if os.path.exists(fname_out) == False or recompute_deduplication:
+    #if True:
         #
         corrs = []
-        for k in trange(rasters.shape[0],desc='computing intercell correlation'):
+
+        print ("... computing pairwise pearson correlation ...")
+        
+        ids = np.array_split(np.arange(rasters.shape[0]),100)
+        
+        res = parmap.map(correlations_parallel, 
+                         ids, 
+                         rasters,
+                         pm_processes=n_cores,
+                         pm_pbar = True)
+
+        # unpack res file
+        corrs = np.vstack(res)
+        print ("Parallel corrs: ", corrs.shape)
+        
+        np.save(fname_out, corrs)
+    else:
+        corrs = np.load(fname_out)
+
+    return corrs
+
+
+#
+def compute_correlations(rasters, c):
+    fname_out = os.path.join(c.data_dir,
+                             'cell_correlations.npy'
+                             )
+    if os.path.exists(fname_out) == False or c.recompute_deduplication:
+        #
+        corrs = []
+        #for k in trange(rasters.shape[0],desc='computing intercell correlation'):
+        for k in trange(rasters.shape[0]): #,desc='computing intercell correlation'):
             temp1 = rasters[k]
             #
             for p in range(k + 1, rasters.shape[0], 1):
@@ -1737,7 +1866,7 @@ def make_correlation_array(corrs, rasters):
     # data = []
     corr_array = np.zeros((rasters.shape[0], rasters.shape[0], 2), 'float32')
 
-    for k in trange(len(corrs),desc='getting correlations and pvals'):
+    for k in range(len(corrs)):
         cell1 = int(corrs[k][0])
         cell2 = int(corrs[k][1])
         pcor = corrs[k][2]
@@ -1750,29 +1879,30 @@ def make_correlation_array(corrs, rasters):
 
 
 def generate_cell_overlaps(c):
-    fname_out = os.path.join(c.root_dir,
-                             c.animal_id,
-                             c.session,
-                             'suite2p',
-                             'plane0',
+    fname_out = os.path.join(c.data_dir,
                              'cell_overlaps.pkl'
                              )
 
-    if os.path.exists(fname_out) == False:
-
+    if os.path.exists(fname_out) == False or c.recompute_deduplication:
+        
+        print ("... computing cell overlaps ...")
+        
         ids = np.array_split(np.arange(c.footprints.shape[0]), 30)
 
         if c.parallel:
             res = parmap.map(find_overlaps1,
                          ids,
                          c.footprints,
+                         #c.footprints_bin,
                          pm_processes=c.n_cores,
                          pm_pbar=True)
         else:
             res = []
             for k in trange(len(ids)):
                 res.append(find_overlaps1(ids[k],
-                                          c.footprints))
+                                          c.footprints,
+                                         #c.footprints_bin
+                                         ))
 
         df = make_overlap_database(res)
 
@@ -1823,3 +1953,107 @@ def alpha_shape(points, alpha=0.6):
     triangles = list(polygonize(m))
 
     return cascaded_union(triangles), edge_points
+
+
+
+def pca_multi_sessions(data_dirs, 
+                       n_cells,
+                       n_sec,
+                       remove_duplicate_cells,
+                       recompute_deduplication,
+                       process_quiescent_periods
+                          ):
+    
+    from tqdm import tqdm
+    for data_dir in tqdm(data_dirs,desc='running PCA on multi-sessions'):
+        # initialize calcium object and load suite2p data
+        c = Calcium()
+        c.verbose = False                          # outputs additional information during processing
+        c.recompute_binarization = False           # recomputes binarization and other processing steps; 
+        c.data_dir = data_dir
+        c.load_suite2p()                          # this function assumes output dirs is either in data_dir OR data_dir/suite2p/plane0/
+
+
+        #
+        c.load_binarization()
+        traces = c.F_onphase_bin    # c.F_upphase_bin
+
+
+        #################################################
+        ####### OPTIONAL: REMOVE DUPLICATE CELLS ########
+        #################################################
+        if remove_duplicate_cells:
+            c.load_footprints()
+            c.deduplication_method = 'overlap'      # 'overlap'; 'centre_distance'
+            c.corr_min_distance = 8                 # min distance for centre_distance method - NOT USED HERE
+            c.corr_max_percent_overlap = 0.25       # max normalized cell body allowed 
+            c.corr_threshold = 0.3                  # max correlation allowed for high overlap; 
+                                                    #     note correlations computed using filtered fluorescecne not binarized
+            c.corr_delete_method = 'lowest_snr'     # highest_connected: removes hub neurons,keeps more cells; 
+                                                    # lowest_snr - removes lower SNR cells, keep less neurons
+            c.recompute_deduplication = recompute_deduplication       # recompute the dedplucaiton wif new paramters are saved
+
+
+            c.remove_duplicate_neurons()            
+
+            #       
+            traces = traces[c.clean_cell_ids]
+            #print ("All cells: ", c.F.shape, "  unique cells: ", traces_unique.shape)
+
+
+        ##############################################################
+        ### OPTIONAL: LOAD WHEEL DATA AND QUEISCENT OR RUN PERIODS ####
+        ###############################################################
+        # 
+        if process_quiescent_periods:
+            w = wheel.Wheel()
+            w.root_dir = os.path.join(c.data_dir.replace('suite2p/','').replace('plane0',''),    
+                                      'TRD-2P')                                                   
+            w.load_track()
+            w.compute_velocity()
+            print ("Exp time : ", w.track.velocity.times.shape[0]/w.imaging_sample_rate)
+
+            # 
+            w.max_velocity_quiescent = 0.001  # in metres per second
+            idx_quiescent = w.get_indexes_quiescent_periods()
+
+            #
+            w.min_velocity_running = 0.1  # in metres per second
+            idx_run = w.get_indexes_run_periods()
+
+
+        #########################################################
+        ####### RUN PCA ON ALL OR SUBSET OF TRACES ##############
+        #########################################################
+        #
+        # take only 200 cells; either random or top
+        if n_cells !='all':
+            if traces.shape[0]>=n_cells:
+                traces = traces[:n_cells]
+            else:
+                print (" ... insuficient cells ...")
+                fname_out = os.path.join(c.data_dir, 'pca_insufficient_cells.pkl')
+                np.save(fname_out, np.arange(n_cells))
+                continue
+
+        # 
+        if process_quiescent_periods:
+            traces = traces[:,idx_quiescent]
+            
+        #        
+        if n_sec!='all':
+            times = np.arange(n_sec)
+            
+            if traces.shape[1]>=times.shape[0]:
+                traces = traces[:,times]
+            else:
+                print (" ... insuficient times ...")
+                fname_out = os.path.join(c.data_dir, 'pca_insufficient_times.pkl')
+                np.save(fname_out, times)
+                continue
+                
+            
+        pca, X_pca = c.compute_PCA(traces)
+
+        # 
+
