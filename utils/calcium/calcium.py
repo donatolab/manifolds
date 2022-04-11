@@ -16,6 +16,17 @@ import sklearn
 import pandas as pd
 import cv2
 from scipy.signal import butter, sosfilt, sosfreqz
+from sklearn import datasets, linear_model
+from scipy import stats
+
+from utils.wheel import wheel
+from utils.calcium import calcium
+from utils.animal_database import animal_database
+
+from sklearn import metrics
+from sklearn import datasets, linear_model
+from sklearn.metrics import mean_squared_error, r2_score
+
 
 import sys
 module_path = os.path.abspath(os.path.join('..'))
@@ -136,8 +147,8 @@ class Calcium():
         
     #
     def load_suite2p(self):
-        print ('')
-        print ('')
+        #print ('')
+        #print ('')
         suffix1 = 'suite2p'
         suffix2 = 'plane0'
         
@@ -1220,7 +1231,26 @@ class Calcium():
             # traces_aliased = np.clip(traces_out_anti_aliased, 0,1)
 
         return traces_out, traces_out_anti_aliased
+    
+    def load_PCA(self, session, ncells=200, n_times='all'):
+        #
 
+        # run PCA
+        suffix1 = str(ncells)
+        suffix2 = str(n_times)
+        fname_out = os.path.join(self.root_dir, self.animal_id,
+                                 self.session,
+                                 #'suite2p','plane0', 'pca.pkl')
+                                'suite2p', 'plane0', suffix1+suffix2+'pca.pkl')
+        #print ("fname_out
+        with open(fname_out, 'rb') as file:
+            pca = pk.load(file)
+
+        X_pca = np.load(fname_out.replace('pkl','npy'))
+
+        return pca, X_pca
+    
+    
 
     #
     def binarize(self, traces, thresh = 2):
@@ -1256,12 +1286,12 @@ class Calcium():
         return traces_out, traces_out_anti_aliased
 
 
-    def compute_PCA(self, X, recompute=True):
+    def compute_PCA(self, X, suffix1='', suffix2='',recompute=True):
         #
 
         # run PCA
-
-        fname_out = os.path.join(self.data_dir, 'pca.pkl')
+        
+        fname_out = os.path.join(self.data_dir,str(suffix1)+str(suffix2)+'pca.pkl')
 
         if os.path.exists(fname_out)==False or recompute:
             pca = PCA()
@@ -1456,18 +1486,18 @@ class Calcium():
         a = nx.connected_components(self.G)
         removed_cells = []
         tot, a = it_count(a)
-        with tqdm(total=tot) as pbar:
-            ctr=0
-            for nn in a:
-                if self.corr_delete_method=='lowest_snr':
-                    good_ids, removed_ids = del_lowest_snr(nn, self)
-                elif self.corr_delete_method=='highest_connected':
-                    good_ids, removed_ids = del_highest_connected_nodes(nn, self)
-                # print (removed_ids)
-                removed_cells.append(removed_ids)
-                #sleep(0.01)
-                pbar.update(ctr)
-                ctr+=1
+        #with tqdm(total=tot) as pbar:
+        #    ctr=0
+        for nn in a:
+            if self.corr_delete_method=='lowest_snr':
+                good_ids, removed_ids = del_lowest_snr(nn, self)
+            elif self.corr_delete_method=='highest_connected':
+                good_ids, removed_ids = del_highest_connected_nodes(nn, self)
+            # print (removed_ids)
+            removed_cells.append(removed_ids)
+            #sleep(0.01)
+            # pbar.update(ctr)
+            #    ctr+=1
         #
         if len(removed_cells)>0:
             removed_cells = np.hstack(removed_cells)
@@ -1519,7 +1549,7 @@ class Calcium():
         os.environ['OPENBLAS_NUM_THREADS'] = '1'
         os.environ['OMP_NUM_THREADS']= '1'
 
-        print (" ... deduplicating cells... (can take ~5 for ~1,000cells) ")
+        # print (" ... deduplicating cells... (can take ~5 for ~1,000cells) ")
 
         # if self.deduplication_method == 'centre_distance':
         self.dists, self.dists_upper = find_inter_cell_distance(self.footprints)
@@ -1955,24 +1985,30 @@ def alpha_shape(points, alpha=0.6):
     return cascaded_union(triangles), edge_points
 
 
-
 def pca_multi_sessions(data_dirs, 
                        n_cells,
                        n_sec,
                        remove_duplicate_cells,
                        recompute_deduplication,
-                       process_quiescent_periods
+                       process_quiescent_periods,
+                       sample_rate = 30,
+                       recompute=True
                           ):
     
     from tqdm import tqdm
-    for data_dir in tqdm(data_dirs,desc='running PCA on multi-sessions'):
+    #for data_dir in tqdm(data_dirs,desc='running PCA on multi-sessions'):
+    for data_dir in data_dirs:
+        
+        # fname_out = os.path.join(data_dir, 'pca.pkl')
+        # if os.path.exists(fname_out) and recompute==False:
+        #     continue
+                   
         # initialize calcium object and load suite2p data
         c = Calcium()
         c.verbose = False                          # outputs additional information during processing
         c.recompute_binarization = False           # recomputes binarization and other processing steps; 
         c.data_dir = data_dir
-        c.load_suite2p()                          # this function assumes output dirs is either in data_dir OR data_dir/suite2p/plane0/
-
+        c.load_suite2p()                          # 
 
         #
         c.load_binarization()
@@ -1998,28 +2034,35 @@ def pca_multi_sessions(data_dirs,
 
             #       
             traces = traces[c.clean_cell_ids]
-            #print ("All cells: ", c.F.shape, "  unique cells: ", traces_unique.shape)
 
 
         ##############################################################
         ### OPTIONAL: LOAD WHEEL DATA AND QUEISCENT OR RUN PERIODS ####
         ###############################################################
         # 
+        print ("Session: ", data_dir)
+
         if process_quiescent_periods:
-            w = wheel.Wheel()
-            w.root_dir = os.path.join(c.data_dir.replace('suite2p/','').replace('plane0',''),    
-                                      'TRD-2P')                                                   
-            w.load_track()
-            w.compute_velocity()
-            print ("Exp time : ", w.track.velocity.times.shape[0]/w.imaging_sample_rate)
+            try:
+                w = wheel.Wheel()
+                w.root_dir = os.path.join(c.data_dir.replace('suite2p/','').replace('plane0',''),    
+                                          'TRD-2P')                                                   
+                w.load_track()
+                
+                w.compute_velocity()
+                print ("Exp time : ", w.track.velocity.times.shape[0]/w.imaging_sample_rate)
 
-            # 
-            w.max_velocity_quiescent = 0.001  # in metres per second
-            idx_quiescent = w.get_indexes_quiescent_periods()
+                # 
+                w.max_velocity_quiescent = 0.001  # in metres per second
+                idx_quiescent = w.get_indexes_quiescent_periods()
 
-            #
-            w.min_velocity_running = 0.1  # in metres per second
-            idx_run = w.get_indexes_run_periods()
+                #
+                w.min_velocity_running = 0.1  # in metres per second
+                idx_run = w.get_indexes_run_periods()
+            except:
+                print ("  wheel data missing  ")
+                idx_quiescent = []
+                idx_run = []
 
 
         #########################################################
@@ -2027,11 +2070,14 @@ def pca_multi_sessions(data_dirs,
         #########################################################
         #
         # take only 200 cells; either random or top
-        if n_cells !='all':
+        if n_cells =='all':
+            suffix1='all'
+        else:
+            suffix1=str(n_cells)
             if traces.shape[0]>=n_cells:
                 traces = traces[:n_cells]
             else:
-                print (" ... insuficient cells ...")
+                print (" ... insuficient cells ...", traces.shape[0])
                 fname_out = os.path.join(c.data_dir, 'pca_insufficient_cells.pkl')
                 np.save(fname_out, np.arange(n_cells))
                 continue
@@ -2041,8 +2087,11 @@ def pca_multi_sessions(data_dirs,
             traces = traces[:,idx_quiescent]
             
         #        
-        if n_sec!='all':
-            times = np.arange(n_sec)
+        if n_sec==-1:
+            suffix2='all'
+        else:
+            suffix2=str(n_sec)
+            times = np.arange(n_sec*sample_rate)
             
             if traces.shape[1]>=times.shape[0]:
                 traces = traces[:,times]
@@ -2052,8 +2101,334 @@ def pca_multi_sessions(data_dirs,
                 np.save(fname_out, times)
                 continue
                 
-            
-        pca, X_pca = c.compute_PCA(traces)
+        #print ("Suffix: ", suffix)
+        recompute=True
+        pca, X_pca = c.compute_PCA(traces, suffix1,suffix2, recompute)
 
         # 
 
+
+        
+def process_pca_animal(fig1, ax1, ax2,
+                       fig3, ax3,
+                       animal_id,
+                       root_dir,
+                       binarization_method,
+                       n_cells,
+                       n_sec,
+                       clrs,
+                       cell_randomization,
+                       quiescent=True,
+                       recompute=True):
+
+    # 
+    fnames_aucs = os.path.join(root_dir, animal_id, 
+                               'pca_'+binarization_method+'_random_'+
+                                   str(cell_randomization)+'_'+
+                            'quiescent_'+str(quiescent)+"_aucs.npz")
+    
+    plotting = True
+    session_names = []
+    
+    
+    print ('', n_cells, n_sec)
+    # 
+    if os.path.exists(fnames_aucs) and recompute==False:
+        data = np.load(fnames_aucs)
+        aucs = data['aucs']
+        n_neurons = data['n_neurons']
+    # 
+    else:
+        #remove_id = []
+        #for session in sessions:
+        #    if 'tracking' in session:
+        #        sessions.remove(session)
+        #        break
+
+        # MAKE SURE THIS IS TRULY SORTED
+        #sessions = sorted(os.listdir(os.path.join(root_dir, animal_id)))
+        #sessions = sessions#[:10]  # LIMIT TO 10 sessions    
+        ad = animal_database.AnimalDatabase()
+        ad.load_sessions(animal_id)
+    
+        sessions = ad.sessions
+        
+        # 
+        cmap = plt.get_cmap("jet", len(sessions))
+
+        #
+        #n_cells = []
+        # max_neurons = 0
+        n_neurons = []
+        aucs = []
+        for ctr, session in enumerate(sessions):
+            print ("SESSION: ", session, ", aucs: ", aucs)
+
+            # 
+            fname_saved = os.path.join(root_dir, animal_id, session,
+                                       str(n_cells)+str(n_sec)+'pca.pkl'
+                                      )    
+                
+            try:
+                pca, X_pca = load_PCA2(root_dir,
+                                   animal_id,
+                                   session, 
+                                   n_cells, 
+                                   n_sec)
+            except:
+                aucs.append(np.nan)
+                continue
+                    # run 
+            var_exp = pca.explained_variance_ratio_
+            d = np.arange(var_exp.shape[0])/var_exp.shape[0]
+
+            # area under the curve 
+            auc = metrics.auc(d,np.cumsum(var_exp))
+            
+            aucs.append(auc)
+
+            # 
+            if plotting:
+                ax3.plot(d,np.cumsum(var_exp),
+                        c=cmap(ctr), label = session)            
+
+                # Plot # of neurons
+                ax1.scatter(ctr, X_pca.shape[1],
+                            s=200,
+                            color=cmap(ctr))
+
+                ax2.scatter(ctr, auc,
+                            marker='^',
+                            s=200,
+                            color=cmap(ctr))
+            
+            
+        #
+        np.savez(fnames_aucs,
+                 aucs = aucs,
+                 n_neurons = n_neurons,
+                 session_names = session_names)
+
+    return aucs, n_neurons
+        
+    
+#
+def fit_curves_aucs(aucs, fig1, ax1, ax2,
+                      fig3, ax3,
+                      animal_id,
+                      root_dir,
+                      binarization_method,
+                      clrs):
+    
+    ######################################################################
+    ########################## FIT AUC CURVES ############################
+    ######################################################################
+    regr_auc = linear_model.LinearRegression()
+
+    aucs=np.array(aucs).squeeze()
+    print ('aucs:', aucs)
+    idx = np.where(np.isnan(aucs)==False)[0]
+    t = idx
+    aucs = aucs[idx]
+    print (", t: ", t, " , aucs post clean: ", aucs)
+    
+    pcor = stats.pearsonr(t,
+                          aucs)
+    print ("PCOR: ",pcor)
+    ax2.set_title("Pearson corr: "+str(round(pcor[0],6))+ " "+str(round(pcor[1],6)))
+
+
+
+    # Train the model using the training sets
+    #x = np.arange(aucs.shape[0]).reshape(-1,1)
+    #y = aucs.reshape(-1,1)
+    print ("x, y: ", t, aucs)
+    regr_auc.fit(t.reshape(-1,1),
+                 aucs.reshape(-1,1))
+
+    # Make predictions using the testing set
+    pred_y = regr_auc.predict(t.reshape(-1,1))
+
+    ax2.plot(t, pred_y,
+             #c=clrs[ctr_bin],
+             c='black',
+             linewidth=3,
+            label=binarization_method)
+
+
+
+    ######################################################################
+    ##################### FIT # NEURON CURVES ############################
+    ######################################################################
+#     regr_neurons = linear_model.LinearRegression()
+
+#     # Train the model using the training sets
+#     n_neurons = np.array(n_neurons)[idx]
+#     x = np.arange(len(n_neurons)).reshape(-1,1)
+#     y = np.array(n_neurons).reshape(-1,1)
+#     print (x.shape, y.shape)
+#     regr_neurons.fit(x, y)
+
+#     # Make predictions using the testing set
+#     pred_y = regr_neurons.predict(x)
+
+#     ax1.plot(x, pred_y,
+#              '--',c='black',
+#              linewidth=3
+#             )
+
+
+    #ctr_bin+=1
+    ax2.legend()
+
+    ######################################################################
+    ####################### CLEAN UP PLOTS ###############################
+    ######################################################################
+
+    # 
+    if False:
+        fontsize=30
+        plt.suptitle(animal_name + ", " + trainings[ctr_animal_id], fontsize=fontsize)
+    else:
+        fontsize=10
+        plt.title(animal_id + ", " +
+                  ", auc slope "+str(round(regr_auc.coef_[0][0],4))
+                  #", n_neurons slope "+str(round(regr_neurons.coef_[0][0],8))
+                                    , fontsize=fontsize)
+
+    ax1.set_ylim(0, 400)
+    ax1.set_xlim(0,10)
+    ax1.set_xlabel("Session Day (chronological)",fontsize=fontsize)
+    ax1.set_ylabel("CIRCLES - # of detected cells (suite2p uncleaned)",fontsize=fontsize)
+    ax1.tick_params(axis='both', which='both', labelsize=fontsize)
+
+    #
+    #ax3.set_xticks()
+    ax2.tick_params(axis='both', which='both', labelsize=fontsize)
+    ax2.set_ylim(0,1)
+    ax2.set_ylabel("TRIANGLES - Area under the variance explained curve ",fontsize=fontsize)
+    
+
+    
+def fit_curves_general(df,
+                       aucs, 
+                       ax,
+                       animal_id,
+                       clr):
+    # load database
+    print ("AUCS: ", aucs)
+    ######################################################################
+    ########################## FIT AUC CURVES ############################
+    ######################################################################
+    regr_auc = linear_model.LinearRegression()
+
+    aucs = np.array(aucs)
+    idx = np.where(np.isnan(aucs)==False)[0]
+    aucs=aucs[idx]
+    x = idx.reshape(-1,1)
+
+    pcor = stats.pearsonr(np.arange(len(aucs)),
+                          np.array(aucs))
+    print ("PCOR: ",pcor)
+    
+    # Train the model using the training sets
+    #x = np.arange(len(aucs)).reshape(-1,1)
+    y = np.array(aucs).reshape(-1,1)
+    regr_auc.fit(x, y)
+
+    # Make predictions using the testing set
+    pred_y = regr_auc.predict(x)
+
+    
+    #
+    idx2 = np.where(df['Mouse_id']==animal_id)[0].squeeze()
+    P_start = int(df.iloc[idx2]['Pday_start'])
+    P_end = int(df.iloc[idx2]['Pday_end'])
+    age = df.iloc[idx2]['Group']
+  
+    # fill in gaps
+    xx = idx+P_start
+    #xx= np.arange(P_start,P_end+1,1)
+    print ("xx: ", xx)
+    print ("aucs: ", aucs)
+    
+    pval = pcor[1]
+    
+    if pval<0.01:
+        alpha=1.0
+    elif pval<0.05:
+        alpha=0.8
+    else:
+        alpha=.4
+    
+    # plot scatter
+    if pval<0.05:
+        line_type = ''
+    else:
+        line_type = '--'
+        
+    ax.scatter(xx,aucs,
+               c=clr,
+               s=100,
+               alpha = 1)
+    
+    
+    
+    # plot fit
+    ax.plot(xx, pred_y,line_type,
+             #c=clrs[ctr_bin],
+             c=clr,
+             linewidth=3,
+             label=animal_id + " "+ age+ ",  Pcor: " + 
+             str(format(pcor[0],".3f"))+   #print(format(321,".2f"))
+             ",  Pval: "+str(format(pcor[1],".3f")),
+             alpha = alpha)
+
+    return ax
+
+def load_pca_animal(root_dir, 
+                   animal_id,
+                   binarization_method,
+                   cell_randomization,
+                   quiescent):
+    
+    fnames_aucs = os.path.join(root_dir, animal_id, 
+                               'pca_'+binarization_method+'_random_'+
+                                   str(cell_randomization)+
+                               '_quiescent_'+str(quiescent)+'_aucs.npz')
+    
+    # 
+    if os.path.exists(fnames_aucs):
+        data = np.load(fnames_aucs)
+        aucs = data['aucs']
+        n_neurons = data['n_neurons']
+    else:
+        print ("File does not exist", fnames_aucs)
+        
+        return None, None
+    return aucs, n_neurons
+
+
+def load_PCA2(root_dir, 
+              animal_id,
+              session, 
+              ncells=200, 
+              n_times='all'):
+    #
+
+    # run PCA
+    suffix1 = str(ncells)
+    suffix2 = str(n_times)
+    fname_out = os.path.join(root_dir, animal_id,
+                             session,
+                             #'suite2p','plane0', 'pca.pkl')
+                            'suite2p', 'plane0', suffix1+suffix2+'pca.pkl')
+    #print ("fname_out
+    with open(fname_out, 'rb') as file:
+        pca = pk.load(file)
+
+    X_pca = np.load(fname_out.replace('pkl','npy'))
+
+    return pca, X_pca
+
+    
