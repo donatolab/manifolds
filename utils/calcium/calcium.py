@@ -129,6 +129,9 @@ class Calcium():
         #
         self.high_cutoff = 1
         self.low_cutoff = 0.005
+        
+        #
+        self.recompute_binarization = False
 
     #
     def load_calcium(self):
@@ -1286,20 +1289,24 @@ class Calcium():
         return traces_out, traces_out_anti_aliased
 
 
-    def compute_PCA(self, X, suffix1='', suffix2='',recompute=True):
+    def compute_PCA(self, X, suffix1='', suffix2='',recompute=True, save=True):
         #
 
         # run PCA
         
         fname_out = os.path.join(self.data_dir,str(suffix1)+str(suffix2)+'pca.pkl')
 
+        print (" Runing PCA (saving flag: "+str(save)+", location: "+fname_out+")")
         if os.path.exists(fname_out)==False or recompute:
             pca = PCA()
             X_pca = pca.fit_transform(X)
-            pk.dump(pca, open(fname_out, "wb"))
 
             #
-            np.save(fname_out.replace('pkl','npy'), X_pca)
+            if save:
+                pk.dump(pca, open(fname_out, "wb"))
+                np.save(fname_out.replace('pkl','npy'), X_pca)
+            else:
+                print ("... not saving...")
         else:
             with open(fname_out, 'rb') as file:
                 pca = pk.load(file)
