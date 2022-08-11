@@ -21,7 +21,7 @@ from scipy import stats
 
 from utils.wheel import wheel
 from utils.calcium import calcium
-from utils.animal_database import animal_database
+#from utils.animal_database import animal_database
 
 from sklearn import metrics
 from sklearn import datasets, linear_model
