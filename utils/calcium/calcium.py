@@ -1560,6 +1560,7 @@ class Calcium():
 
         # if self.deduplication_method == 'centre_distance':
         self.dists, self.dists_upper = find_inter_cell_distance(self.footprints)
+
         # elif self.deduplication_method == 'overlap':
         self.df_overlaps = generate_cell_overlaps(self)
 
