@@ -785,6 +785,8 @@ class Calcium():
                 self.F_filtered = self.low_pass_filter(self.F)
                 # remove median
                 self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
+
+            #
             else:
                 #
                 self.F_filtered = self.low_pass_filter(self.F)
@@ -1296,8 +1298,8 @@ class Calcium():
         
         fname_out = os.path.join(self.data_dir,str(suffix1)+str(suffix2)+'pca.pkl')
 
-        print (" Runing PCA (saving flag: "+str(save)+", location: "+fname_out+")")
-        if os.path.exists(fname_out)==False or recompute:
+        if os.path.exists(fname_out)==False or self.recompute_PCA:
+            print(" Runing PCA (saving flag: " + str(save) + ", location: " + fname_out + ")")
             pca = PCA()
             X_pca = pca.fit_transform(X)
 
@@ -1315,8 +1317,7 @@ class Calcium():
 
         return pca, X_pca
 
-
-
+    #
     def compute_TSNE(self, X):
         #
 
@@ -1500,11 +1501,10 @@ class Calcium():
                 good_ids, removed_ids = del_lowest_snr(nn, self)
             elif self.corr_delete_method=='highest_connected':
                 good_ids, removed_ids = del_highest_connected_nodes(nn, self)
-            # print (removed_ids)
+
+            #
             removed_cells.append(removed_ids)
-            #sleep(0.01)
-            # pbar.update(ctr)
-            #    ctr+=1
+
         #
         if len(removed_cells)>0:
             removed_cells = np.hstack(removed_cells)
@@ -1514,6 +1514,8 @@ class Calcium():
         # 
         clean_cells = np.delete(np.arange(self.F.shape[0]),
                               removed_cells)
+
+        #
         self.clean_cell_ids = clean_cells
 
         return self.clean_cell_ids
@@ -1550,43 +1552,116 @@ class Calcium():
                         edgecolor='red')
 
 
-    def remove_duplicate_neurons(self):
+    #
+    def compute_correlations(self):
 
-        # turn off intrinsice parallization or this step goes too slow
-        os.environ['OPENBLAS_NUM_THREADS'] = '1'
-        os.environ['OMP_NUM_THREADS']= '1'
-
-        # print (" ... deduplicating cells... (can take ~5 for ~1,000cells) ")
-
-        # if self.deduplication_method == 'centre_distance':
-        self.dists, self.dists_upper = find_inter_cell_distance(self.footprints)
-
-        # elif self.deduplication_method == 'overlap':
-        self.df_overlaps = generate_cell_overlaps(self)
-
-        # compute correlations between neurons
-        rasters = self.F_filtered   # use fluorescence filtered traces
-        # self.corrs = compute_correlations(rasters, self)
-        self.corrs = compute_correlations_parallel(rasters, 
-                                                   self.data_dir, 
-                                                   self.n_cores,
-                                                   self.recompute_deduplication)
-        self.corr_array = make_correlation_array(self.corrs, rasters)
-
-        # find neurnos that are below threhsolds
-        if self.deduplication_method =='centre_distance':
-            self.candidate_neurons = self.find_candidate_neurons_centers()
-        elif self.deduplication_method == 'overlap':
-            self.candidate_neurons = self.find_candidate_neurons_overlaps()
-
-
-        # find connected neurons
-        #      also reduce network pairs to single nodes
-        self.make_correlated_neuron_graph()
 
         #
-        self.delete_duplicate_cells()
+        fname_out = os.path.join(self.data_dir,
+                                 'allcell_correlation_data_' + self.correlation_datatype + '.npy'
+                                 )
+        fname_out_array = os.path.join(self.data_dir,
+                                 'allcell_correlation_array_' + self.correlation_datatype + '.npy'
+                                 )
 
+        ############## COMPUTE CORRELATIONS ###################
+        if os.path.exists(fname_out) == False or self.recompute_deduplication:
+
+            # turn off intrinsice parallization or this step goes too slow
+            os.environ['OPENBLAS_NUM_THREADS'] = '1'
+            os.environ['OMP_NUM_THREADS']= '1'
+
+            # if self.deduplication_method == 'centre_distance':
+            self.dists, self.dists_upper = find_inter_cell_distance(self.footprints)
+
+            # compute correlations between neurons
+            if self.correlation_datatype == 'filtered':
+                rasters = self.F_filtered   # use fluorescence filtered traces
+            elif self.correlation_datatype == 'upphase':
+                rasters = self.F_upphase_bin
+            else:
+                print ("ERROR datatype not known ")
+
+            # self.corrs = compute_correlations(rasters, self)
+            self.corrs = compute_correlations_parallel(rasters,
+                                                       self.n_cores)
+
+            # save data out
+            np.save(fname_out, self.corrs)
+        else:
+            self.corrs = np.load(fname_out)
+
+        ########## MAKE CORRELATION ARRAY #########
+        if os.path.exists(fname_out_array) == False:
+
+            # make the final correlation array
+            self.corr_array = make_correlation_array(self.corrs, self.F_upphase_bin.shape[0])
+
+            # save only the pearson corr value; not the pvalue
+            np.save(fname_out_array, self.corr_array)
+
+        #
+        else:
+            #
+            self.corr_array = np.load(fname_out_array)
+
+    #
+    def remove_duplicate_neurons(self):
+
+        #
+        fname_clean_corr_array  = os.path.join(self.data_dir,
+                                 'goodcell_correlations_array_post_deduplication_' + self.correlation_datatype + '.npy'
+                                 )
+
+        #
+        if os.path.exists(fname_clean_corr_array)==False:
+
+            # elif self.deduplication_method == 'overlap':
+            self.df_overlaps = generate_cell_overlaps(self)
+
+            # find neurons that are below threhsolds
+            if self.deduplication_method =='centre_distance':
+                self.candidate_neurons = self.find_candidate_neurons_centers()
+            elif self.deduplication_method == 'overlap':
+                self.candidate_neurons = self.find_candidate_neurons_overlaps()
+
+
+            # find connected neurons
+            #      also reduce network pairs to single nodes
+            self.make_correlated_neuron_graph()
+
+            #
+            self.clean_cell_ids  = self.delete_duplicate_cells()
+
+            # save clean cell ids:
+            fname_cleanids  = os.path.join(self.data_dir,
+                                     'good_ids_post_deduplication_' + self.correlation_datatype + '.npy'
+                                     )
+            np.save(fname_cleanids, self.clean_cell_ids)
+
+            # resave the the correlation array
+            print ("pre clean corr array: ", self.corr_array.shape)
+            print ("clean cell ids: ", self.clean_cell_ids.shape)
+
+            #
+            self.corr_array = self.corr_array[self.clean_cell_ids][:,self.clean_cell_ids,0]
+            print ("pre clean corr array: ", self.corr_array.shape)
+
+            #
+            np.save(fname_clean_corr_array, self.corr_array)
+
+    #
+    def load_good_cell_ids(self):
+
+        #
+        fname_cleanids = os.path.join(self.data_dir,
+                                      'good_ids_post_deduplication_' + self.correlation_datatype + '.npy'
+                                      )
+
+        #
+        self.good_cell_ids = np.load(fname_cleanids)
+
+#
 def parallel_network_delete(nn, ):
     pass
 
@@ -1838,36 +1913,28 @@ def correlations_parallel(ids, rasters, subsample=5):
             corrs.append([k, p, corr[0], corr[1]])
     
     return corrs
-                
-def compute_correlations_parallel(rasters, 
-                                  data_dir, 
-                                  n_cores,
-                                  recompute_deduplication=False):
-    fname_out = os.path.join(data_dir,
-                             'cell_correlations.npy'
-                             )
-    if os.path.exists(fname_out) == False or recompute_deduplication:
-    #if True:
-        #
-        corrs = []
 
-        print ("... computing pairwise pearson correlation ...")
-        
-        ids = np.array_split(np.arange(rasters.shape[0]),100)
-        
-        res = parmap.map(correlations_parallel, 
-                         ids, 
-                         rasters,
-                         pm_processes=n_cores,
-                         pm_pbar = True)
+def compute_correlations_parallel(rasters,
+                                  n_cores):
 
-        # unpack res file
-        corrs = np.vstack(res)
-        print ("Parallel corrs: ", corrs.shape)
-        
-        np.save(fname_out, corrs)
-    else:
-        corrs = np.load(fname_out)
+    #
+    print ("... computing pairwise pearson correlation ...")
+    print (" RASTERS IN: ", rasters.shape)
+    # split data
+    ids = np.array_split(np.arange(rasters.shape[0]),100)
+
+
+
+    #
+    res = parmap.map(correlations_parallel,
+                     ids,
+                     rasters,
+                     pm_processes=n_cores,
+                     pm_pbar = True)
+
+    # unpack res file
+    corrs = np.vstack(res)
+    print ("Parallel corrs: ", corrs.shape) # if True:
 
     return corrs
 
@@ -1900,11 +1967,11 @@ def compute_correlations(rasters, c):
     return corrs
 
 
-def make_correlation_array(corrs, rasters):
+def make_correlation_array(corrs, n_cells):
     # data = []
-    corr_array = np.zeros((rasters.shape[0], rasters.shape[0], 2), 'float32')
+    corr_array = np.zeros((n_cells, n_cells, 2), 'float32')
 
-    for k in range(len(corrs)):
+    for k in trange(len(corrs)):
         cell1 = int(corrs[k][0])
         cell2 = int(corrs[k][1])
         pcor = corrs[k][2]
