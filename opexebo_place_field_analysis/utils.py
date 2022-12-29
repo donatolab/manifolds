@@ -1,5 +1,6 @@
 from scipy.signal import savgol_filter
 import numpy as np
+np.seterr(divide='ignore', invalid='ignore')
 import os
 import scipy
 import matplotlib.pyplot as plt
@@ -1211,6 +1212,7 @@ def get_rms_and_place_field_from_tunning_map_split_test(cell_id,
                                                         y_edges,
                                                         sigma=1.0,
                                                         circular_shuffle=False,
+                                                        split = True,
                                                         # limits
                                                         ):
     #################################################
@@ -1228,26 +1230,31 @@ def get_rms_and_place_field_from_tunning_map_split_test(cell_id,
         upphase = np.roll(upphase, temp)
         filtered = np.roll(filtered, temp)
 
-    # Option 1: first half and second hafl
+    # split data or NOT depending on flag
     idxs = []
-    if True:
-        idxs.append(np.arange(0, upphase.shape[0] // 2, 1))
-        idxs.append(np.arange(upphase.shape[0] // 2, upphase.shape[0], 1))
+    if split:
+        # Option 1: first half and second half
+        if True:
+            idxs.append(np.arange(0, upphase.shape[0] // 2, 1))
+            idxs.append(np.arange(upphase.shape[0] // 2, upphase.shape[0], 1))
 
-    # Option 2: 1 min chunks
+        # Option 2: 1 min chunks
+        else:
+            fps = 20
+            n_sec = 60
+            idx_temp = np.split(np.arange(upphase.shape[0]), np.arange(0, upphase.shape[0], fps * n_sec), axis=0)
+            # print ("idx temp: ", idx_temp)
+            idxs.append(np.hstack(idx_temp[::2]))
+            idxs.append(np.hstack(idx_temp[1::2]))
+
     else:
-        fps = 20
-        n_sec = 60
-        idx_temp = np.split(np.arange(upphase.shape[0]), np.arange(0, upphase.shape[0], fps * n_sec), axis=0)
-        # print ("idx temp: ", idx_temp)
-        idxs.append(np.hstack(idx_temp[::2]))
-        idxs.append(np.hstack(idx_temp[1::2]))
+        idxs.append(np.arange(upphase.shape[0]))
 
     #
     fields = []
     fields_map = []
     rms = []
-    for k in range(2):
+    for k in range(len(idxs)):
         #
         signaltracking_entry = {"x_pos_signal": locs[idxs[k], 0],
                                 "y_pos_signal": locs[idxs[k], 1],
@@ -1297,64 +1304,245 @@ def get_rms_and_place_field_from_tunning_map_split_test(cell_id,
     return rms, fields, fields_map
 
 
+def plot_cell_3d(ax,
+                 rms,
+                 zmax=None):
+    x = []
+    y = []
+    z = []
+
+    x = np.arange(rms.shape[0])
+    y = np.arange(rms.shape[1])
+    x, y = np.meshgrid(x, y)
+
+    #     #
+    for k in range(rms.shape[0]):
+        for p in range(rms.shape[1]):
+            z.append(rms[k, p])
+
+    z = np.hstack(z).reshape(rms.shape[0], rms.shape[1])
+
+    ax.contour3D(x, y, z, 300, cmap='viridis')
+
+    if zmax is not None:
+        ax.set_zlim(0, zmax)
+
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z');
+
 #
 def plot_fields(cell,
                 occ_map):
 
+    fig = plt.figure(figsize=(15,10))
+
     cell_id = cell['cell_id']
-    fields_map = cell["fields_map_good"]
-    rms = cell["rms_good"]
+    fields_map = cell["fields_map_split"]
+    rms = cell["rms_split"]
+    rms_all = cell['rms_all'][0]
+    spatial_info_zscores = cell["spatial_info_zscores"]
+    print ("SI zscores: ", spatial_info_zscores)
+    spatial_info = cell['spatial_info']
 
-    rms_good = []
 
+
+    print ("sI zscores: ", len(spatial_info_zscores))
+    print ("sI: ", len(spatial_info))
+
+
+    #
+    fields_map_all = cell['fields_map_all'][0]#.squeeze()
+
+    # plot all data
+    ax = fig.add_subplot(231, projection='3d')
+    ax.azim = 250
+    ax.dist = 8
+    ax.elev = 30
+
+    #
+    plot_cell_3d(ax, rms_all)
+    ax.zaxis.set_rotate_label(False)  # disable automatic rotation
+
+
+    ax.set_zlabel('Smooth Rate Map', fontsize=10
+                  , rotation=90
+                  )
+
+    z_max = np.max(rms_all)
+
+    #
+    plt.title("all (moving) times, SI Zscore: "+str(round(spatial_info_zscores[0],2)), fontsize=10, pad=0.9)
+
+    #
+    res = op.analysis.rate_map_stats(rms_all,
+                                     occ_map,
+                                     debug=False)
+
+    #
+    coh = op.analysis.rate_map_coherence(rms_all)
+
+    #
+    text = "SI_rate: " + str(round(res['spatial_information_rate'], 2)) + \
+           "  SI_cont: " + str(round(res['spatial_information_content'], 2)) + \
+           "  Sparse: " + str(round(res['sparsity'], 2)) + ' \n ' + \
+           "Select: " + str(round(res['selectivity'], 2)) + \
+           "  Peak_r: " + str(round(res['peak_rate'], 2)) + \
+           "  Mean_r: " + str(round(res['mean_rate'], 2)) + \
+           "  Coh: " + str(round(coh, 2))
+
+    #
+    ax2 = plt.subplot(2, 3, 4)
+    plt.imshow(fields_map_all,
+               extent=[0,fields_map_all.shape[0], fields_map_all.shape[1],0])
+    plt.xlim(0,fields_map_all.shape[0])
+    plt.ylim(0,fields_map_all.shape[1])
+
+    #
+    plt.ylabel("Opexebo place fields")
+    plt.suptitle("cell " + str(cell_id) + "\n" + str(text), fontsize=10)
+
+    # plot the split data
+    texts = ['first half', 'second half']
     for k in range(2):
-        ax = plt.subplot(2, 2, k + 1)
+        #ax = plt.subplot(2, 3, k + 2)
+
+        ax2 = fig.add_subplot(2,3,k+2, projection='3d')
+        ax2.azim = 250
+        ax2.dist = 8
+        ax2.elev = 30
+        #
+        plot_cell_3d(ax2,
+                     rms[k],
+                     z_max)
+
+        ax2.set_xlabel('')
+        ax2.set_ylabel('')
+        ax2.set_zlabel('')
 
         #
-        plt.imshow(rms[k],
-                   # vmin=np.min(img1),
-                   # vmax=np.max(img1)
-                   )
+        #plt.title(, fontsize=10, pad=0.9)
+        plt.title(texts[k] + ", SI Zscore: " + str(round(spatial_info_zscores[k+1],2)), fontsize=10, pad=0.9)
+
+        # #
+        # res = op.analysis.rate_map_stats(rms[k],
+        #                                  occ_map,
+        #                                  debug=False)
         #
-        plt.xticks([])
-        plt.yticks([])
-        plt.title(str(cell_id), fontsize=10, pad=0.9)
+        # #
+        # coh = op.analysis.rate_map_coherence(rms[k])
+
+        # #
+        # text = "SI_rate: " + str(round(res['spatial_information_rate'], 2)) + \
+        #        "  SI_cont: " + str(round(res['spatial_information_content'], 2)) + \
+        #        "  Sparse: " + str(round(res['sparsity'], 2)) + ' \n ' + \
+        #        "Select: " + str(round(res['selectivity'], 2)) + \
+        #        "  Peak_r: " + str(round(res['peak_rate'], 2)) + \
+        #        "  Mean_r: " + str(round(res['mean_rate'], 2)) + \
+        #        "  Coh: " + str(round(coh, 2))
 
         #
-        res = op.analysis.rate_map_stats(rms[k],
-                                         occ_map,
-                                         debug=False)
-
-        #
-        coh = op.analysis.rate_map_coherence(rms[k])
-
-        #
-        text = "SI_rate: " + str(round(res['spatial_information_rate'], 2)) + \
-               "  SI_cont: " + str(round(res['spatial_information_content'], 2)) + \
-               "  Sparse: " + str(round(res['sparsity'], 2)) + ' \n ' + \
-               "Select: " + str(round(res['selectivity'], 2)) + \
-               "  Peak_r: " + str(round(res['peak_rate'], 2)) + \
-               "  Mean_r: " + str(round(res['mean_rate'], 2)) + \
-               "  Coh: " + str(round(coh, 2))
-
-        #spatial_infos.append(res['spatial_information_content'])
-
-        #
-        ax.set_ylabel(text, labelpad=.3, fontsize=8)
-
-        #
-        ax2 = plt.subplot(2, 2, k + 3)
+        ax2 = plt.subplot(2, 3, k + 5)
+        plt.xlim(0, fields_map[k].shape[0])
+        plt.ylim(0, fields_map[k].shape[1])
         plt.imshow(fields_map[k],
-                   )
-        plt.xticks([])
-        plt.yticks([])
-        plt.title(str(cell_id), fontsize=10, pad=0.9)
+                   extent=[0, fields_map_all.shape[0], fields_map_all.shape[1], 0])
 
-        plt.suptitle("cell " + str(cell_id) + "\n" + str(res) + "\ncoherence " + str(coh), fontsize=10)
+    #
+def compute_all_place_fields_parallel(n_tests,
+                                      fname_traces,
+                                      fname_locs,
+                                      cell_ids=None,
+                                      ):
+
+    #########################################################
+    ########## ARENA AND OCCUPANCY MAP COMPUTATIONS #########
+    #########################################################
+    arena_x = [300, 1550]
+    arena_y = [175, 1400]
+    arena_size = [80, 80]
+    arena_shape = 'square'
+    bin_width = 2.5
+
+    #
+    locs, upphases, times, filtered_Fs = load_locs_traces_running(fname_locs,
+                                                                  fname_traces,
+                                                                  arena_size)
+
+    # compute spatial occpuancy map; only requires the locatoins and
+    occ_map, coverage, bin_edges = op.analysis.spatial_occupancy(times,
+                                                                 locs.T,
+                                                                 arena_size,
+                                                                 bin_width=bin_width)
+
+    #
+    x_edges = bin_edges[0]
+    y_edges = bin_edges[1]
+
+    #
+    fname_occ_map = os.path.join(os.path.split(fname_traces)[0], "occ_map.npy")
+    occ_map.dump(fname_occ_map)
+
+    #########################################################
+    ############### PLACE FIELD COMPUTATION #################
+    #########################################################
+    if cell_ids is None:
+        cell_ids = np.arange(0, upphases.shape[0], 1)
+    sigma = 1.5
+    circular_shuffle = False
+
+    #
+    overlaps = []
+    s_info = []
+    res_arrays = []
+    cohs_array = []
+    D_array = []
+
+    # make root directory for data saving
+    root_dir = os.path.join(os.path.split(fname_traces)[0],
+                            "cell_analysis")
+    try:
+        os.mkdir(root_dir)
+    except:
+        pass
+
+    #
+    if True:
+        parmap.map(check_cell_id_field,
+               cell_ids,
+               root_dir,
+               upphases,
+               filtered_Fs,
+               locs,
+               occ_map,
+               arena_size,
+               sigma,
+               circular_shuffle,
+               n_tests,
+               x_edges,
+               y_edges,
+               pm_pbar = True,
+               )
+    else:
+        for cell_id in cell_ids:
+            check_cell_id_field(cell_id,
+                                root_dir,
+                                upphases,
+                                filtered_Fs,
+                                locs,
+                                occ_map,
+                                arena_size,
+                                sigma,
+                                circular_shuffle,
+                                n_tests,
+                                x_edges,
+                                y_edges,
+                                )
 
 
 #
 def check_cell_id_field(cell_id,
+                        root_dir,
                         upphases,
                         filtered_Fs,
                         locs,
@@ -1367,11 +1555,20 @@ def check_cell_id_field(cell_id,
                         y_edges
                         ):
 
+    #
+    fname_out = os.path.join(root_dir, str(cell_id)+'.npy')
+    if os.path.exists(fname_out):
+        return
 
-    D = {}
 
     #
-    rms_good, _, fields_map_good = get_rms_and_place_field_from_tunning_map_split_test(cell_id,
+    D = {}
+
+    ###############################################
+    ########## GET RMS FOR WHOLE DATA #############
+    ###############################################
+    split = False  # do not split data
+    rms_all, _, fields_map_all = get_rms_and_place_field_from_tunning_map_split_test(cell_id,
                                                                                        upphases,
                                                                                        filtered_Fs,
                                                                                        locs,
@@ -1381,9 +1578,28 @@ def check_cell_id_field(cell_id,
                                                                                        y_edges,
                                                                                        sigma,
                                                                                        circular_shuffle,
-
-                                                                                       # limits
+                                                                                       split,
                                                                                        )
+
+
+    ###############################################
+    ########## GET RMS FOR SPLIT DATA #############
+    ###############################################
+    split = True
+    rms_split, _, fields_map_split = get_rms_and_place_field_from_tunning_map_split_test(cell_id,
+                                                                                       upphases,
+                                                                                       filtered_Fs,
+                                                                                       locs,
+                                                                                       occ_map,
+                                                                                       arena_size,
+                                                                                       x_edges,
+                                                                                       y_edges,
+                                                                                       sigma,
+                                                                                       circular_shuffle,
+                                                                                       split
+                                                                                       )
+
+
 
     ###############################################
     ###############################################
@@ -1392,73 +1608,79 @@ def check_cell_id_field(cell_id,
     rms_shuffle = []
     fields_map_shuffle = []
     circular_shuffle = True
-    if n_tests > 0:
-        cell_ids = np.ones(n_tests, dtype=np.int32) + cell_id
+    parallel_flag = False
+    cell_ids = np.ones(n_tests, dtype=np.int32) + cell_id
+    split = False
 
-        #
-        res = parmap.map(get_rms_and_place_field_from_tunning_map_split_test,
-                         cell_ids,
-                         upphases,
-                         filtered_Fs,
-                         locs,
-                         occ_map,
-                         arena_size,
-                         x_edges,
-                         y_edges,
-                         sigma,
-                         circular_shuffle,
-                         pm_pbar=False
-                         )
+    #
+    res = []
+    for cell_id in cell_ids:
+        res.append(get_rms_and_place_field_from_tunning_map_split_test(cell_id,
+                                                                 upphases,
+                                                                 filtered_Fs,
+                                                                 locs,
+                                                                 occ_map,
+                                                                 arena_size,
+                                                                 x_edges,
+                                                                 y_edges,
+                                                                 sigma,
+                                                                 circular_shuffle,
+                                                                 split
+                                                                     ))
 
-        #
-        for re in res:
-            rms_shuffle.append(re[0])
-            fields_map_shuffle.append(re[2])
+    #
+    for re in res:
+        rms_shuffle.append(re[0])
+        fields_map_shuffle.append(re[2])
 
     ###############################################
     ###### COMPUTE SPATIAL INFO OVER ALL DATA #####
     ###############################################
     spatial_infos = []
-    sf = []
     res_array = []
-    for k in range(2):
-        res = op.analysis.rate_map_stats(rms_good[k],
-                                         occ_map,
-                                         debug=False)
-        res_array.append(res)
-        sf.append(res['spatial_information_content'])
-    spatial_infos.append(np.nanmean(sf))
 
-    #
-    for p in range(len(rms_shuffle)):
-        sf = []
-        for k in range(2):
-            res = op.analysis.rate_map_stats(rms_shuffle[p][k],
+    # add the nonsufhlled SI
+    res = op.analysis.rate_map_stats(rms_all,
+                                     occ_map,
+                                     debug=False)
+    res_array.append(res)
+    spatial_infos.append(res['spatial_information_content'])
+
+    # and the split data
+    for p in range(len(rms_split)):
+        res = op.analysis.rate_map_stats(rms_split[p],
                                              occ_map,
                                              debug=False)
-            sf.append(res['spatial_information_content'])
+        res_array.append(res)
+        spatial_infos.append(res['spatial_information_content'])
 
-        spatial_infos.append(np.nanmean(sf))
+    # and then add all the final data
+    for p in range(len(rms_shuffle)):
+        res = op.analysis.rate_map_stats(rms_shuffle[p],
+                                             occ_map,
+                                             debug=False)
+        res_array.append(res)
+        spatial_infos.append(res['spatial_information_content'])
+
+    #print ("length: ", len(spatial_infos))
+    spatial_info_zscores = stats.zscore(np.hstack(spatial_infos), nan_policy='omit')
+    print ("spatial infos: ", spatial_infos)
+    print ("SI zscors: ", spatial_info_zscores)
+
 
     ###############################################
     ############### COMPUTE OVERLAPS ##############
     ###############################################
+    # loop over the 2
     overlaps = []
-    overlaps.append(compute_overlap(fields_map_good))
-    for k in range(len(fields_map_shuffle)):
-        # print ("sending in : ", fields_map_shuffle[k])
-        overlaps.append(compute_overlap(fields_map_shuffle[k]))
-
-    #
-    rms_zscores = stats.zscore(np.hstack(overlaps))
-    spatial_info_zscores = stats.zscore(np.hstack(spatial_infos))
+    overlaps.append(compute_overlap(fields_map_split))
 
     #####################################################
     ############# COHERENCE #############################
     #####################################################
     cohs = []
     for k in range(2):
-        temp = op.analysis.rate_map_coherence(rms_good[k])
+        temp = op.analysis.rate_map_coherence(rms_split[k])
         cohs.append(temp)
 
     #
@@ -1466,21 +1688,23 @@ def check_cell_id_field(cell_id,
     D['cell_id'] = cell_id
     D["overlaps"] = overlaps
     D["spatial_info"] = spatial_infos
-    D["overlaps_zscores"] = rms_zscores
     D["spatial_info_zscores"] = spatial_info_zscores
     D["coherence"] = cohs
-    D["fields_map_good"] = fields_map_good
+    D["fields_map_split"] = fields_map_split
     D["res_array"] = res_array
-    D["rms_good"] = rms_good
+    D["rms_split"] = rms_split
+    D['rms_all'] = rms_all
+    D['fields_map_all'] = fields_map_all
 
     #
-    print("overlap: ", overlaps[0], ", spatial info: ", spatial_infos[0], ", coherence: ", np.nanmean(np.hstack(cohs)))
     if False:
         if n_tests > 0:
             print(cell_id, "overlap: ", overlaps[0], ", zscore: ", rms_zscores[0])
             print("       spatial infos: ", spatial_infos[0], ", zscore: ", spatial_info_zscores[0])
 
-    return D  # rms_zscores, spatial_info_zscores, fields_map_good, rms_good, res_array, cohs
+    #
+    np.save(fname_out, D, allow_pickle=True)
+
 
 
 def plot_all_metrics(cells):
@@ -1496,12 +1720,11 @@ def plot_all_metrics(cells):
     peak_rs = []
     selectivity = []
     for cell in cells:
-        #cell = D_array[k]
         cell_ids.append(cell['cell_id'])
         si = cell['spatial_info'][0]
         si_z = cell['spatial_info_zscores'][0]
         overl = cell['overlaps'][0]
-        overl_z = cell['overlaps_zscores'][0]
+
         #
         temp = cell['res_array']
         spar = []
@@ -1527,7 +1750,7 @@ def plot_all_metrics(cells):
         sis.append(si)
         sis_z.append(si_z)
         overls.append(overl)
-        overls_z.append(overl_z)
+        #overls_z.append(overl_z)
         cohs.append(coh)
         spars.append(spar)
         si_rates.append(si_rate)
@@ -1562,15 +1785,23 @@ def plot_all_metrics(cells):
                # alpha=overl_z,
                edgecolor='black',
                c=color)
+
+    #
     plt.xlabel(" overlap of place field (1st half and 2nd half)")
     plt.ylabel(" zscore spatial info")
     for k in range(len(overls)):
         ax.annotate(str(cell_ids[k]), (overls[k], sis_z[k]))
 
+    x = np.arange(0.0, 1, 0.01)
+    y1 = np.zeros(x.shape[0])+3
+    y2 = np.zeros(x.shape[0])+np.nanmax(sis_z)
+
+    #fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, figsize=(6, 6))
+    ax.fill_between(x, y1, y2, color='grey',alpha=.5)
+
     ############################
     ax = plt.subplot(3, 3, 3)
     color = 'blue'
-    #print(overls_z)
     ax.scatter(overls,
                si_rates,
                s=100,
@@ -1582,22 +1813,25 @@ def plot_all_metrics(cells):
     for k in range(len(overls)):
         ax.annotate(str(cell_ids[k]), (overls[k], si_rates[k]))
 
-    ############################
-    ax = plt.subplot(3, 3, 4)
-    color = 'red'
-    ax.scatter(overls,
-               overls_z,
-               s=100,
-               # alpha=overl_z,
-               edgecolor='black',
-               c=color)
-    plt.xlabel(" overlap of place field (1st half and 2nd half)")
-    plt.ylabel(" zscore overlap")
-    for k in range(len(overls)):
-        ax.annotate(str(cell_ids[k]), (overls[k], overls_z[k]))
+    plt.semilogy()
 
     ############################
-    ax = plt.subplot(3, 3, 5)
+    # if False:
+    #     ax = plt.subplot(3, 3, 4)
+    #     color = 'red'
+    #     ax.scatter(overls,
+    #                overls_z,
+    #                s=100,
+    #                # alpha=overl_z,
+    #                edgecolor='black',
+    #                c=color)
+    #     plt.xlabel(" overlap of place field (1st half and 2nd half)")
+    #     plt.ylabel(" zscore overlap")
+    #     for k in range(len(overls)):
+    #         ax.annotate(str(cell_ids[k]), (overls[k], overls_z[k]))
+
+    ############################
+    ax = plt.subplot(3, 3, 4)
     color = 'green'
     ax.scatter(overls,
                cohs,
@@ -1611,7 +1845,7 @@ def plot_all_metrics(cells):
         ax.annotate(str(cell_ids[k]), (overls[k], cohs[k]))
 
     ############################
-    ax = plt.subplot(3, 3, 6)
+    ax = plt.subplot(3, 3, 5)
     color = 'black'
     ax.scatter(overls,
                spars,
@@ -1625,7 +1859,7 @@ def plot_all_metrics(cells):
         ax.annotate(str(cell_ids[k]), (overls[k], spars[k]))
 
     ############################
-    ax = plt.subplot(3, 3, 7)
+    ax = plt.subplot(3, 3, 6)
     color = 'brown'
     ax.scatter(overls,
                peak_rs,
@@ -1639,7 +1873,7 @@ def plot_all_metrics(cells):
         ax.annotate(str(cell_ids[k]), (overls[k], peak_rs[k]))
 
     ############################
-    ax = plt.subplot(3, 3, 8)
+    ax = plt.subplot(3, 3, 7)
     color = 'darkblue'
     ax.scatter(overls,
                selectivity,
@@ -1660,8 +1894,8 @@ def plot_all_metrics(cells):
 def load_cell(root_dir,
               cell_id):
     try:
-        cell = np.load(os.path.join(root_dir,
-                str(cell_id) + '.npy'), allow_pickle=True)
+        fname = os.path.join(root_dir, str(cell_id) + '.npy')
+        cell = np.load(fname, allow_pickle=True)
     except:
         return None
 
