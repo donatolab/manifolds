@@ -4,9 +4,12 @@ np.seterr(divide='ignore', invalid='ignore')
 import os
 import scipy
 import matplotlib.pyplot as plt
-#
-import scipy.stats as stats
 
+#
+import cv2
+import scipy.stats as stats
+from scipy.signal import savgol_filter
+import glob
 #
 import parmap
 
@@ -20,7 +23,9 @@ import parmap
 import opexebo as op
 import astropy
 
-
+#########################################################################
+#########################################################################
+#########################################################################
 def get_spikes(locs,
                locs_times,
                spikes_all,
@@ -402,88 +407,88 @@ def get_rms_and_place_field(cell_id,
     return rm, rms, fields_map, occ_map
     
 #
-def load_locs_traces_running(fname_locs,
-                             fname_traces,
-                             arena_size,
-                             n_frames_per_sec=20,
-                             n_pixels_per_cm=15,   # not used    
-                             min_vel=4):          #minimum velocity in cm/sec
-    
-        
-        
-    ####################### LOAD SPIKES ########################
-    data = np.load(fname_traces,
-                   allow_pickle=True)
-
-    #
-    upphases = data['F_upphase']
-    #print ("traces: ", traces.shape, traces[0][:100])
-    
-    filtered_Fs = data['F_filtered']
-    
-    
-    ####################### LOAD LOCATIONS ###################
-    locs = np.load(fname_locs)
-    print (locs.shape)
-    
-    #################### COMPUTE VELOCITY ####################
-    
-    dists = np.linalg.norm(locs[1:,:]-locs[:-1,:], axis=1)
-    print (dists.shape)
-    
-    #
-    vel_all = (dists)*(n_frames_per_sec)
-    
-    #
-    from scipy.signal import savgol_filter
-
-    vel_all = savgol_filter(vel_all, n_frames_per_sec, 2)
-
-    #
-    idx_stationary = np.where(vel_all<min_vel)[0]
-    vel = vel_all.copy()
-    vel[idx_stationary] = np.nan
-
-    
-   
-    ####################### NORMALIZE SIZE OF ARENA  ###########################
-    #
-    min_x = np.min(locs[:,0])
-    max_x = np.max(locs[:,0])
-
-    min_y = np.min(locs[:,1])
-    max_y = np.max(locs[:,1])
-
-    #
-    locs[:,0] = (locs[:,0]-min_x)/(max_x-min_x)*arena_size[0]
-    locs[:,1] = (locs[:,1]-min_y)/(max_y-min_y)*arena_size[1]
-
-    ####################### DELETE EXTRA IMAGING TIME ###########################
-    rec_duration = locs.shape[0]
-    
-    upphases = upphases[:,:rec_duration]
-    filtered_Fs = filtered_Fs[:,:rec_duration]
-    
-
-    ####################### REMOVE STATIONARY PERIODS ###########################
-    
-    #times = np.delete(times, idx_stationary, axis=0)
-    
-    locs = np.delete(locs, idx_stationary, axis=0)
-    
-    upphases = np.delete(upphases, idx_stationary, axis=1)
-    
-    filtered_Fs = np.delete(filtered_Fs, idx_stationary, axis=1)
-    
-    ################### COMPUTE TIMES BASED ON THE MOVING PERIODS ######################
-    #
-    times = np.arange(locs.shape[0])    
-    
-    #
-    print ("Locs: ", locs.shape, " uphases: ", upphases.shape)
-   
-    #
-    return locs, upphases, times, filtered_Fs
+# def load_locs_traces_running(fname_locs,
+#                              fname_traces,
+#                              arena_size,
+#                              n_frames_per_sec=20,
+#                              n_pixels_per_cm=15,   # not used
+#                              min_vel=4):          #minimum velocity in cm/sec
+#
+#
+#
+#     ####################### LOAD SPIKES ########################
+#     data = np.load(fname_traces,
+#                    allow_pickle=True)
+#
+#     #
+#     upphases = data['F_upphase']
+#     #print ("traces: ", traces.shape, traces[0][:100])
+#
+#     filtered_Fs = data['F_filtered']
+#
+#
+#     ####################### LOAD LOCATIONS ###################
+#     locs = np.load(fname_locs)
+#     print ("locs: ", locs.shape)
+#
+#     #################### COMPUTE VELOCITY ####################
+#
+#     dists = np.linalg.norm(locs[1:,:]-locs[:-1,:], axis=1)
+#     print ("dists: ", dists.shape)
+#
+#     #
+#     vel_all = (dists)*(n_frames_per_sec)
+#
+#     #
+#     from scipy.signal import savgol_filter
+#
+#     vel_all = savgol_filter(vel_all, n_frames_per_sec, 2)
+#
+#     #
+#     idx_stationary = np.where(vel_all<min_vel)[0]
+#     vel = vel_all.copy()
+#     vel[idx_stationary] = np.nan
+#
+#
+#
+#     ####################### NORMALIZE SIZE OF ARENA  ###########################
+#     #
+#     min_x = np.min(locs[:,0])
+#     max_x = np.max(locs[:,0])
+#
+#     min_y = np.min(locs[:,1])
+#     max_y = np.max(locs[:,1])
+#
+#     #
+#     locs[:,0] = (locs[:,0]-min_x)/(max_x-min_x)*arena_size[0]
+#     locs[:,1] = (locs[:,1]-min_y)/(max_y-min_y)*arena_size[1]
+#
+#     ####################### DELETE EXTRA IMAGING TIME ###########################
+#     rec_duration = locs.shape[0]
+#
+#     upphases = upphases[:,:rec_duration]
+#     filtered_Fs = filtered_Fs[:,:rec_duration]
+#
+#
+#     ####################### REMOVE STATIONARY PERIODS ###########################
+#
+#     #times = np.delete(times, idx_stationary, axis=0)
+#
+#     locs = np.delete(locs, idx_stationary, axis=0)
+#
+#     upphases = np.delete(upphases, idx_stationary, axis=1)
+#
+#     filtered_Fs = np.delete(filtered_Fs, idx_stationary, axis=1)
+#
+#     ################### COMPUTE TIMES BASED ON THE MOVING PERIODS ######################
+#     #
+#     times = np.arange(locs.shape[0])
+#
+#     #
+#     print ("Locs: ", locs.shape, " uphases: ", upphases.shape)
+#
+#     #
+#     return locs, upphases, times, filtered_Fs
 
 #
 def calc_tuningmap(occupancy, x_edges, y_edges, signaltracking, params):
@@ -980,30 +985,38 @@ def load_locs_traces_running(fname_locs,
                              n_pixels_per_cm=15,  # not used
                              min_vel=4):  # minimum velocity in cm/sec
 
+    #print ('')
+    #################### LOAD THE DATA OFFSET ##################
+    try:
+        start = np.loadtxt(os.path.split(fname_locs)[0]+"/start.txt", dtype=np.int)
+    except:
+        start = 0
+    print ("OFFSET is ", start)
+
+
     ####################### LOAD SPIKES ########################
     data = np.load(fname_traces,
                    allow_pickle=True)
 
     #
     upphases = data['F_upphase']
-    # print ("traces: ", traces.shape, traces[0][:100])
+    #print ("upphases : ", upphases.shape)
 
     filtered_Fs = data['F_filtered']
 
     ####################### LOAD LOCATIONS ###################
     locs = np.load(fname_locs)
-    print(locs.shape)
+    locs = locs[start:]
+    #print("locs after trimming: ", locs.shape)
 
     #################### COMPUTE VELOCITY ####################
 
     dists = np.linalg.norm(locs[1:, :] - locs[:-1, :], axis=1)
-    print(dists.shape)
 
     #
     vel_all = (dists) * (n_frames_per_sec)
 
     #
-    from scipy.signal import savgol_filter
 
     vel_all = savgol_filter(vel_all, n_frames_per_sec, 2)
 
@@ -1024,12 +1037,6 @@ def load_locs_traces_running(fname_locs,
     locs[:, 0] = (locs[:, 0] - min_x) / (max_x - min_x) * arena_size[0]
     locs[:, 1] = (locs[:, 1] - min_y) / (max_y - min_y) * arena_size[1]
 
-    ####################### DELETE EXTRA IMAGING TIME ###########################
-    rec_duration = locs.shape[0]
-
-    upphases = upphases[:, :rec_duration]
-    filtered_Fs = filtered_Fs[:, :rec_duration]
-
     ####################### REMOVE STATIONARY PERIODS ###########################
 
     # times = np.delete(times, idx_stationary, axis=0)
@@ -1040,12 +1047,19 @@ def load_locs_traces_running(fname_locs,
 
     filtered_Fs = np.delete(filtered_Fs, idx_stationary, axis=1)
 
+    ####################### DELETE EXTRA IMAGING TIME ###########################
+    rec_duration = locs.shape[0]
+
+    upphases = upphases[:, :rec_duration]
+    filtered_Fs = filtered_Fs[:, :rec_duration]
+
     ################### COMPUTE TIMES BASED ON THE MOVING PERIODS ######################
     #
     times = np.arange(locs.shape[0])
 
     #
-    print("Locs: ", locs.shape, " uphases: ", upphases.shape)
+    fps = 20
+    print("Duration of moving periods ", locs.shape[0]/fps, " # cells: ", upphases.shape[0])
 
     #
     return locs, upphases, times, filtered_Fs
@@ -1342,13 +1356,13 @@ def plot_fields(cell,
     rms = cell["rms_split"]
     rms_all = cell['rms_all'][0]
     spatial_info_zscores = cell["spatial_info_zscores"]
-    print ("SI zscores: ", spatial_info_zscores)
+    #print ("SI zscores: ", spatial_info_zscores)
     spatial_info = cell['spatial_info']
 
 
 
-    print ("sI zscores: ", len(spatial_info_zscores))
-    print ("sI: ", len(spatial_info))
+    #print ("sI zscores: ", len(spatial_info_zscores))
+    #print ("sI: ", len(spatial_info))
 
 
     #
@@ -1405,8 +1419,6 @@ def plot_fields(cell,
     # plot the split data
     texts = ['first half', 'second half']
     for k in range(2):
-        #ax = plt.subplot(2, 3, k + 2)
-
         ax2 = fig.add_subplot(2,3,k+2, projection='3d')
         ax2.azim = 250
         ax2.dist = 8
@@ -1421,25 +1433,7 @@ def plot_fields(cell,
         ax2.set_zlabel('')
 
         #
-        #plt.title(, fontsize=10, pad=0.9)
         plt.title(texts[k] + ", SI Zscore: " + str(round(spatial_info_zscores[k+1],2)), fontsize=10, pad=0.9)
-
-        # #
-        # res = op.analysis.rate_map_stats(rms[k],
-        #                                  occ_map,
-        #                                  debug=False)
-        #
-        # #
-        # coh = op.analysis.rate_map_coherence(rms[k])
-
-        # #
-        # text = "SI_rate: " + str(round(res['spatial_information_rate'], 2)) + \
-        #        "  SI_cont: " + str(round(res['spatial_information_content'], 2)) + \
-        #        "  Sparse: " + str(round(res['sparsity'], 2)) + ' \n ' + \
-        #        "Select: " + str(round(res['selectivity'], 2)) + \
-        #        "  Peak_r: " + str(round(res['peak_rate'], 2)) + \
-        #        "  Mean_r: " + str(round(res['mean_rate'], 2)) + \
-        #        "  Coh: " + str(round(coh, 2))
 
         #
         ax2 = plt.subplot(2, 3, k + 5)
@@ -1452,6 +1446,7 @@ def plot_fields(cell,
 def compute_all_place_fields_parallel(n_tests,
                                       fname_traces,
                                       fname_locs,
+                                      parallel=True,
                                       cell_ids=None,
                                       ):
 
@@ -1488,6 +1483,8 @@ def compute_all_place_fields_parallel(n_tests,
     #########################################################
     if cell_ids is None:
         cell_ids = np.arange(0, upphases.shape[0], 1)
+
+    #
     sigma = 1.5
     circular_shuffle = False
 
@@ -1507,7 +1504,7 @@ def compute_all_place_fields_parallel(n_tests,
         pass
 
     #
-    if True:
+    if parallel:
         parmap.map(check_cell_id_field,
                cell_ids,
                root_dir,
@@ -1609,24 +1606,24 @@ def check_cell_id_field(cell_id,
     fields_map_shuffle = []
     circular_shuffle = True
     parallel_flag = False
-    cell_ids = np.ones(n_tests, dtype=np.int32) + cell_id
+    cell_ids = np.zeros(n_tests, dtype=np.int32) + cell_id
     split = False
 
     #
     res = []
     for cell_id in cell_ids:
         res.append(get_rms_and_place_field_from_tunning_map_split_test(cell_id,
-                                                                 upphases,
-                                                                 filtered_Fs,
-                                                                 locs,
-                                                                 occ_map,
-                                                                 arena_size,
-                                                                 x_edges,
-                                                                 y_edges,
-                                                                 sigma,
-                                                                 circular_shuffle,
-                                                                 split
-                                                                     ))
+                                                                     upphases,
+                                                                     filtered_Fs,
+                                                                     locs,
+                                                                     occ_map,
+                                                                     arena_size,
+                                                                     x_edges,
+                                                                     y_edges,
+                                                                     sigma,
+                                                                     circular_shuffle,
+                                                                     split
+                                                                         ))
 
     #
     for re in res:
@@ -1662,11 +1659,7 @@ def check_cell_id_field(cell_id,
         res_array.append(res)
         spatial_infos.append(res['spatial_information_content'])
 
-    #print ("length: ", len(spatial_infos))
     spatial_info_zscores = stats.zscore(np.hstack(spatial_infos), nan_policy='omit')
-    print ("spatial infos: ", spatial_infos)
-    print ("SI zscors: ", spatial_info_zscores)
-
 
     ###############################################
     ############### COMPUTE OVERLAPS ##############
@@ -1891,6 +1884,108 @@ def plot_all_metrics(cells):
 
     plt.show()
 
+
+def find_placefields(root_dir, animal_id, ax=None, label=''):
+    #
+    sessions = np.loadtxt(root_dir + '/' + animal_id + '/sessions.txt', dtype='str')
+
+    #
+    if ax==None:
+        fig = plt.figure()
+        ax=plt.subplot(111)
+
+    #
+    place_fields = []
+    n_cells = []
+    for ctr, session in tqdm(enumerate(sessions)):
+
+        #
+        root_dir = os.path.join(session,
+                                'cell_analysis')
+
+        #
+        cell_id = 0
+        computed_cells = []
+        # loop over many cells, just in case there are errors etc in the pipelines
+        for k in range(2000):
+
+            cell = load_cell(root_dir,
+                             k)
+
+            if cell is not None:
+                # print ("found: ", k)
+                computed_cells.append(cell)
+                cell_id += 1
+
+        #
+        threshold = 3.0
+        n_si_zscore = 0
+        good_cells=[]
+        for cell in computed_cells:
+            si = cell['spatial_info'][0]
+            si_z = cell['spatial_info_zscores'][0]
+
+            if si_z > threshold:
+                n_si_zscore += 1
+                good_cells.append(cell)
+
+
+        #
+
+        #
+        fname_out = os.path.join(root_dir, animal_id, session, "place_cells.npy")
+        np.save(fname_out, good_cells)
+        n_cells.append(n_si_zscore)
+
+    ax.plot(np.arange(1,len(n_cells)+1,1), n_cells,
+            label=label
+                #c='black'
+                )
+    plt.ylim(0,240)
+
+
+    plt.title(animal_id)
+    plt.ylabel("# of place cells")
+    plt.xlabel("FS Day")
+    plt.legend()
+
+def return_cells(root_dir, animal_id, session_id):
+    #
+    # fname_locs = ('/media/cat/4TB/donato/nathalie/DON-007050/FS9/DON-007050_20211030_TR-BSL_FS9-ACQDLC_resnet50_open_arena_white_floorSep8shuffle1_200000_locs.npy')
+    fname_temp = os.path.join(root_dir,
+                              animal_id,
+                              session_id,
+                              '*locs.npy')
+    fname_locs = glob.glob(fname_temp)[0]
+
+    #
+    fname_traces = os.path.split(fname_locs)[0] + '/binarized_traces.npz'
+
+    #
+    root_dir = os.path.join(os.path.split(fname_traces)[0],
+                            'cell_analysis')
+    #
+    occ_map = np.load(os.path.split(root_dir)[0] + '/occ_map.npy', allow_pickle=True)
+
+    #
+    cell_id = 0
+    cells = []
+    for k in trange(2000):
+
+        cell = load_cell(root_dir,
+                         k)
+
+        if cell is not None:
+            # print ("found: ", k)
+            cells.append(cell)
+            cell_id += 1
+
+    print(" Done... found: ", len(cells), " cells")
+
+    return cells, occ_map
+
+
+
 def load_cell(root_dir,
               cell_id):
     try:
@@ -1900,3 +1995,39 @@ def load_cell(root_dir,
         return None
 
     return cell.item()
+
+
+def plot_contours(root_dir,
+                  animal_id,
+                  session_id):
+
+    #
+    cells, occ_map = return_cells(root_dir,
+                                  animal_id,
+                                  session_id)
+
+    #
+    plt.figure()
+    threshold = 3
+    ctr = 0
+    for cell in cells:
+        if True:
+            if cell["spatial_info_zscores"][0] < threshold:
+                continue
+            ctr += 1
+
+            fields_map_all = cell['fields_map_all'][0] * 10
+            img_grey = fields_map_all.astype('uint8')
+
+            thresh = 1
+            _, thresh_img = cv2.threshold(img_grey, thresh, 255, cv2.THRESH_BINARY)
+            contours, _ = cv2.findContours(thresh_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            contours = contours[0].squeeze()
+            contours = np.append(contours, contours[0][None], axis=0)
+            plt.plot(contours[:, 0], contours[:, 1],
+                     linewidth=3)
+        #except:
+        #    pass
+
+    plt.suptitle(animal_id + " " + session_id + " # place cells: " + str(ctr))
+    plt.show()
