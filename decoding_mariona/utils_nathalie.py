@@ -531,9 +531,11 @@ def preprocess_bayesian(neural_data, locs_cm, min_spikes = 100):
 
     X=neural_data
     print(X.shape)
-    
+
+    #
     y = locs_cm
-    #Remove time bins with no output (y value)
+
+    # Remove time bins with no spiking?!
     rmv_time=np.where(X.sum(axis=1) == 0)
     X=np.delete(X,rmv_time,0)
     y=np.delete(y,rmv_time,0)
@@ -542,7 +544,61 @@ def preprocess_bayesian(neural_data, locs_cm, min_spikes = 100):
     print(X.shape)
     return X, y
 
-    
+
+def plot_decoder_errors(session_ids,
+                        root_dir,
+                        animal_id,
+                        use_place_cells):
+    ls = []
+    colors = plt.cm.viridis(np.linspace(0, 1, len(session_ids)))
+    dists_m = []
+    dists_imm = []
+    for i, session_id in enumerate(session_ids):
+        fname_out = os.path.join(root_dir,
+                                 animal_id,
+                                 session_id,
+                                 "bayes_decoder_place_cells_" + str(use_place_cells) + '.npz')
+        data = np.load(fname_out, allow_pickle=True)
+        dist_m = data['distance_error_mobile']
+        dist_im = data['distance_error_immobile']
+        y_m = np.histogram(dist_m, bins=np.arange(0, 120, 1))
+        y_imm = np.histogram(dist_im, bins=np.arange(0, 120, 1))
+
+        dists_m.append(y_m[0])
+        dists_imm.append(y_imm[0])
+
+    fig = plt.figure()
+    x = y[1][:-1]
+    ax = plt.subplot(1, 1, 1)
+    mean = np.array(dists_m).mean(0)
+    std = np.std(np.array(dists_m), axis=0)
+
+    plt.plot(mean, c='blue', label='moving')
+    ax.fill_between(x, mean - std, mean + std,
+                    color='blue', alpha=.25)
+    ax.legend(loc=1)
+    plt.ylim(bottom=0)
+    plt.xlim(x[0], x[-1])
+    ax.set_ylabel("Moving periods")
+    ##########################
+    ax2 = ax.twinx()
+    mean = np.array(dists_imm).mean(0)
+    std = np.std(np.array(dists_imm), axis=0)
+
+    plt.plot(mean, c='red', label='stationary')
+    ax2.fill_between(x, mean - std, mean + std,
+                     color='red', alpha=.25)
+
+    ax2.legend(loc=2)
+    ax2.set_ylabel("Stationary periods")
+    plt.ylim(bottom=0)
+    plt.xlim(x[0], x[-1])
+    ax.set_xlabel("Error (cm)")
+    plt.title(animal_id)
+
+    #
+    plt.show()
+
 def preprocess_bayesian2(neural_data, locs_cm, min_spikes = 100):
     neural_data = abs(neural_data)
     #Remove neurons with too few spikes in HC dataset
