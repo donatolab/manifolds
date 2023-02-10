@@ -6,9 +6,11 @@ from scipy import signal
 
 #
 def fix_jumps(my_data,
+              fname,
               min_DLC_likelihood,
               max_distance_jump,
-              min_length_seg):
+              min_length_seg,
+              window_smooth):
 
 
     #
@@ -16,6 +18,12 @@ def fix_jumps(my_data,
     xs = my_data[:,::3]
     ys = my_data[:,1::3]
     likelihoods = my_data[:,2::3]
+    #else:
+    #    xs = my
+    print (xs.shape, ys.shape)
+
+    #
+
 
     #
     xs_median = np.nanmedian(xs,axis=1)
@@ -91,6 +99,13 @@ def fix_jumps(my_data,
             xs_median[np.int32(bout)] = np.nan
             ys_median[np.int32(bout)] = np.nan
 
+    #####################################
+    ######## RECONSTITUTE TRACK #########
+    #####################################
+    #
+    locs = np.vstack((xs_median,
+                      ys_median)).T
+
 
     ###############################################
     ############# FILL IN ALL NANS ################
@@ -99,7 +114,7 @@ def fix_jumps(my_data,
     idx = np.where(np.isnan(xs_median))[0]
     print("# of nans: ", idx.shape)
 
-    n_steps = 5
+    n_steps = window_smooth
     for id_ in idx:
         xs_median[id_] = np.nanmedian(xs_median[id_-n_steps:id_+n_steps])
         ys_median[id_] = np.nanmedian(ys_median[id_-n_steps:id_+n_steps])
@@ -107,15 +122,42 @@ def fix_jumps(my_data,
     idx = np.where(np.isnan(xs_median))[0]
     print ("# of nans: ", idx.shape)
 
-    #####################################
-    ######## RECONSTITUTE TRACK #########
-    #####################################
-    #
-    locs = np.vstack((xs_median,
+    locs_nans = np.vstack((xs_median,
                       ys_median)).T
-    
+
+
+    ###################################################
+    ###################################################
+    ###################################################
     print ("locs fixed: ", locs.shape)
 
     #
+    plt.figure(figsize=(25, 8))
+    ax = plt.subplot(1, 3, 1)
+    # snout, top, body, ear left; ear rigth; neck
+    ctr = 6
+    miniscope_top = my_data[:, ctr * 3:ctr * 3 + 2]
+    plt.plot(miniscope_top[:, 0],
+             miniscope_top[:, 1])
+    plt.title("Neck tracked by DLC")
+
+    #
+    ax = plt.subplot(1, 3, 2)
+    plt.plot(locs[:, 0],
+             locs[:, 1])
+    plt.suptitle(fname)
+    plt.title("Fixed body centre; parameters: " + str(min_DLC_likelihood) + " DLC threshold; " + str(
+        max_distance_jump) + " max jump (pixels)")
+
+    ax = plt.subplot(1, 3, 3)
+    plt.plot(locs_nans[:, 0],
+             locs_nans[:, 1])
+    plt.suptitle(fname)
+    plt.title("Same but showing missing connected parts")
+
+
+
+    np.save(fname[:-4] + ".npy", locs)
+
+    #
     #return dist, dist_fixed, locs
-    return locs
