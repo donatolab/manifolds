@@ -4,14 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b815b19d-cc94-437c-97ff-ffc3f0372acd" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/utils/treadmill/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/utils/treadmill/treadmill.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/binarization/Binarize_Suite2p_single_session.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/binarization/Binarize_Suite2p_single_session.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/treadmill_steffen/treadmill_session_ave_correlations.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/treadmill_steffen/treadmill_session_ave_correlations.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/treadmill_steffen/utils_steffen.py" beforeDir="false" afterPath="$PROJECT_DIR$/treadmill_steffen/utils_steffen.py" afterDir="false" />
-    </list>
+    <list default="true" id="b815b19d-cc94-437c-97ff-ffc3f0372acd" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
