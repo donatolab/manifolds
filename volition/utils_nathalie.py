@@ -1048,24 +1048,33 @@ class Volition():
 
         # find distance between predicted and true
         # focus primarily on perdicted distances that are further than some min distance
+
+        if self.before_running:
+            pass
+
+        #
         dists = np.linalg.norm(self.imm_pred - self.imm_true, axis=1)
         idx = np.where(dists > self.min_dist_difference)[0]
 
         #
         if self.shuffle_match:
 
+            self.match_times = []
+            self.all_times = []
             self.match_array = []
             self.hist_array = []
             self.dists_array = []
             self.match_times_array = []
-            for k in range(self.n_shuffles):
+            for k in trange(self.n_shuffles):
                 matches = 0
+                total_times = 0
                 match_times = []
                 dist_array = []
+                all_times = []
                 locs_cm_r = np.roll(self.locs_cm, np.random.choice(np.arange(1000, 10000, 1), 1), axis=0).copy()
 
                 #
-                for id_ in tqdm(idx):
+                for id_ in idx:
 
                     #
                     loc_current = self.imm_true[id_]
@@ -1073,50 +1082,78 @@ class Volition():
                     #
                     loc_predicted = self.imm_pred[id_]
 
+                    #
+                    #dist_now = np.linalg.norm(loc_predicted - loc_current)
+                    #if abs(dist_now) < self.min_dist_difference:
+                    #    continue
+
                     # find correct time back in stack
                     abs_time = self.idx_imm_abs[id_]
 
                     #
                     locs_forward = locs_cm_r[abs_time:abs_time + self.n_sec * self.fps]
 
-                    # check if they are closer
+                    # check distances between future locations and prediction
                     dists = np.linalg.norm(loc_predicted - locs_forward, axis=1)
 
                     #
                     argmin = np.argmin(dists)
 
+                    #
                     if dists[argmin] < self.min_dist_approached:
                         matches += 1
                         match_times.append(argmin)
                         dist_array.append(np.linalg.norm(loc_current - loc_predicted))
+                    #else:
+                    total_times += 1
+                    all_times.append(argmin)
 
                 #
                 match_times = np.array(match_times) / self.fps
+                all_times = np.array(all_times)/self.fps
                 y = np.histogram(match_times, bins=np.arange(0, self.n_sec, self.bin_width))
-                self.hist_array.append(y[0])
+                ym = np.histogram(all_times, bins=np.arange(0, self.n_sec, self.bin_width))
+                self.hist_array.append((y[0]+1)/(ym[0]+1))
                 self.match_array.append(matches)
-                self.match_times_array.append(match_times)
-                self.dists_array.append(dist_array)
+                #self.match_times_array.append(match_times)
+                #self.dists_array.append(dist_array)
+                #self.match_times.append(match_times)
+                self.all_times.append(all_times)
 
             #
             self.match_times = np.mean(np.vstack(self.match_array), axis=0)
+            self.all_times = np.mean(np.vstack(self.all_times), axis=0)
+            y = np.histogram(self.match_times, bins=np.arange(0, self.n_sec, self.bin_width))
+            ya = np.histogram(self.all_times, bins=np.arange(0, self.n_sec, self.bin_width))
+
             self.hist = np.mean(np.vstack(self.hist_array), axis=0)
+            self.std = np.std(np.vstack(self.hist_array), axis=0)
+
             self.x = y[1][:-1]
             self.match_ids = None
 
         else:
             #
             self.matches = 0
+            self.total_times = 0
             self.match_times = []
+            all_times = []
             self.match_ids = []
             self.dists_array = []
-            for id_ in tqdm(idx):
+            for id_ in idx:
 
                 #
                 loc_current = self.imm_true[id_]
 
                 #
                 loc_predicted = self.imm_pred[id_]
+
+                #
+                #dist_now = np.linalg.norm(loc_predicted-loc_current)
+                #print ("dist now: ", dist_now)
+                #if abs(dist_now)<self.min_dist_difference:
+                 #   continue
+
 
                 # find correct time back in stack
                 abs_time = self.idx_imm_abs[id_]
@@ -1136,13 +1173,19 @@ class Volition():
                     self.match_ids.append(id_)
                     self.dists_array.append(np.linalg.norm(loc_current - loc_predicted))
 
+                #
+                self.total_times += 1
+                all_times.append(argmin)
+
             #
             self.match_times = np.array(self.match_times) / self.fps
+            self.all_times = np.array(all_times) / self.fps
             y = np.histogram(self.match_times, bins=np.arange(0, self.n_sec, self.bin_width))
-            self.hist = y[0]
+            ym = np.histogram(self.all_times, bins=np.arange(0, self.n_sec, self.bin_width))
+            self.hist = (y[0]+1)/(ym[0]+1)
             self.x = y[1][:-1]
             self.match_times_array = self.match_times
-
+            self.std=np.zeros(self.hist.shape[0])
         #return matches, match_times, hist, x, match_ids, dists_array, match_times_array
 
 

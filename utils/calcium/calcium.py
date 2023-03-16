@@ -22,6 +22,8 @@ from scipy import stats
 from utils.wheel import wheel
 from utils.calcium import calcium
 #from utils.animal_database import animal_database
+from statistics import NormalDist#, mode
+from scipy.stats import mode
 
 from sklearn import metrics
 from sklearn import datasets, linear_model
@@ -195,7 +197,7 @@ class Calcium():
         ########### COMPUTE GLOBAL MEAN - REMOVE MEAN ###############
         #############################################################
 
-        std_global,_ = self.compute_std_global(self.F)
+        std_global = self.compute_std_global(self.F)
         if self.verbose:
             print ("  Fluorescence data loading information")
             print ("         sample rate: ", self.sample_rate, "hz")
@@ -208,8 +210,6 @@ class Calcium():
             print ("         mean std over all cells : ", std_global)
 
     def compute_std_global(self, F):
-        #if self.verbose:
-        #    print ("computing std of global signal (finding max)")
 
         #
         stds = np.std(F, axis=1)
@@ -223,25 +223,10 @@ class Calcium():
                 idx2 = np.where(stds>0)[0]
 
                 # DO NOT ERASE CELLS
-                # F = F[idx2]
                 stds = stds[idx2]
-
-                #
-                # idx3 = np.where(self.iscell[:,0]==1)[0]
-                #
-                # #
-                # idx4 = np.where(stds==0)[0]
-                # iscell_allgood = self.iscell.copy()
-                # iscell_allgood[idx4]= 0
-                #
-                # #
-                # fname_out = os.path.join(self.data_dir,'iscell_all_good.npy')
-                # np.save(fname_out, self.iscell[idx3][idx2])
 
         #
         y = np.histogram(stds, bins=np.arange(0, 100, .5))
-        #plt.plot(y[1][:-1],y[0])
-        #plt.show()
 
         if False:
             argmax = np.argmax(y[0])
@@ -255,7 +240,7 @@ class Calcium():
             argmax = idx[0]
         std_global = y[1][argmax]
 
-        return std_global, F
+        return std_global
 
 
     def load_inscopix(self):
@@ -328,18 +313,17 @@ class Calcium():
         fig = plt.figure()
         t=np.arange(self.F_filtered.shape[1])/self.sample_rate
 
-    #     if False:
-    #         for k in range(800,848,1):
-    #             plt.plot(t,self.F_filtered[k]/scale+k*1, linewidth=3, label='filtered', alpha=.8)
+        plt.plot(t,self.F_detrended[cell_id], linewidth=3, label='detrended', alpha=.8, c='pink')
 
-    #     else:
-        plt.plot(t,(self.F_filtered[cell_id]-np.median(self.F_filtered[cell_id]))/scale, linewidth=3, label='filtered', alpha=.8,
-                c='black')
-        plt.plot(t,self.F_processed[cell_id]/scale, linewidth=3, label='filtered', alpha=.8,
+        #plt.plot(t,(self.F_filtered[cell_id]-np.median(self.F_filtered[cell_id])), linewidth=3, label='median corrected', alpha=.8,
+        #        c='black')
+        #plt.plot(t,self.dff[cell_id], linewidth=3, label='dff', alpha=.8,
+        #        c='black')
+        plt.plot(t,self.F_processed[cell_id], linewidth=3, label='filtered', alpha=.8,
                 c='blue')
-        plt.plot(t,self.F_onphase_bin[cell_id]*.9, linewidth=3, label='onphase', alpha=.4,
+        plt.plot(t,self.F_onphase_bin[cell_id]*.9*scale, linewidth=3, label='onphase', alpha=.4,
                 c='orange')
-        plt.plot(t,self.F_upphase_bin[cell_id], linewidth=3, label='upphase', alpha=.4,
+        plt.plot(t,self.F_upphase_bin[cell_id]*scale, linewidth=3, label='upphase', alpha=.4,
                 c='green')
 
         plt.legend(fontsize=20)
@@ -422,13 +406,14 @@ class Calcium():
         ax.set_ylim(0,bn.shape[0])
 
     def detrend(self, traces):
-        #import scipy.signal, signal.detrend
+
+        #
         traces_out = traces.copy()
         for k in trange(traces.shape[0], desc='detrending data'):
             #
             temp = traces[k]
 
-            temp =  scipy.signal.detrend(temp, type=='linear')
+            temp = scipy.signal.detrend(temp, type=='linear')
 
             traces_out[k] = temp
 
@@ -470,10 +455,10 @@ class Calcium():
             y[-j:, -(i + 1)] = x[-1]
         return np.median(y, axis=1)
 
-    def filter_model(self, traces):
+    def detrend_traces(self, traces):
         traces_out = traces.copy()
         t = np.arange(traces[0].shape[0])
-        #print ("... TODO: automate the polynomial fit search using RMS optimization?!...")
+        # print ("... TODO: automate the polynomial fit search using RMS optimization?!...")
         #
         for k in trange(traces.shape[0], desc='model filter: remove bleaching or trends'):
             #
@@ -481,94 +466,165 @@ class Calcium():
             # if k==0:
             #     plt.plot(t,temp,c='blue')
 
-            if False:
-                temp = butter_highpass_filter(temp,
-                                             0.01,
-                                             self.sample_rate,
-                                             order=5)
-                std = np.std(temp)
-                idx = np.where(temp>(std*.1))[0]
-                idx2 = np.where(temp<=(std*.1))[0]
-                temp [idx] = np.median(temp[idx2])
-                #temp =  scipy.signal.medfilt(temp, kernel_size=1501)#[source]
+            F_very_low_band_pass = butter_lowpass_filter(temp, self.detrend_filter_threshold, self.sample_rate, self.detrend_model_order)
+            t01 = np.arange(F_very_low_band_pass.shape[0])
 
-                if k==0:
-                    plt.plot(t, temp, c='green')
+            #if self.detrend_model_type == 'polynomial':
+            if True:
 
-                idx = np.where(np.abs(temp)<=(1*std))[0]
 
-            if False:
-                temp = butter_lowpass_filter(temp,
-                                             0.01,
-                                             self.sample_rate,
-                                             order=5)
-                #std = np.std(temp)
-                #idx = np.where(temp>(std*1))[0]
-                #idx2 = np.where(temp<=(std*1))[0]
-                #temp [idx] = np.median(temp[idx2])
-                #
-                z=[1,2]
-                while z[0]>1E-8:
-                    z = np.polyfit(t, temp, 1)
-                    #print ("slopes: ", z)
+                # just fit line to median of first 10k points and last 10k points
+                if self.detrend_model_order == 1:
+
+                    #z = np.polyfit(t01, median01, 1)
+                    z = np.polyfit(t01, F_very_low_band_pass, 1)
                     p = np.poly1d(z)
 
                     temp = temp - p(t)
+                    traces_out[k] = traces_out[k] - p(t)
 
-            # just fit line to median of first 10k points and last 10k points
-            if self.detrend_model_order==1:
+                if self.detrend_model_order > 1:
 
-                median01 = np.array([np.median(temp[:10000]),
-                                    np.median(temp[-10000:])])
-                #median2= temp[-10000:]
-                t01 = np.array([0,temp.shape[0]-1])
-                #print (t01, median01)
-                z = np.polyfit(t01, median01, 1)
+                    z = np.polyfit(t01, F_very_low_band_pass, self.detrend_model_order)
 
-                p = np.poly1d(z)
+                    p = np.poly1d(z)
 
-                temp = temp - p(t)
-                traces_out[k] = traces_out[k] - p(t)
+                    if k == 0:
+                        plt.plot(t, p(t), c='black')
 
-            if self.detrend_model_order==2:
-                #temp = butter_lowpass_filter(temp,
-                #                             0.01,
-                #                             self.sample_rate,
-                #                             order=5)
+                    temp = temp - p(t)
+                    traces_out[k] = traces_out[k] - p(t)
 
+                #if self.detrend_model_order > 2:
 
-                z = np.polyfit(t, temp, 2)
+                #    z = np.polyfit(t, temp, self.detrend_model_order)
 
-                p = np.poly1d(z)
+                #    p = np.poly1d(z)
 
-                if k == 0:
-                    plt.plot(t, p(t), c='black')
+                #    traces_out[k] = traces_out[k] - p(t)
+
+            if True:
+            #elif self.detrend_model_type == 'mode':
+                # print("Mode based filtering not implemented yet...")
+                if self.mode_window == None:
+                    y = np.histogram(temp, bins=np.arange(-1, 1, 0.001))
+                    y_mode = y[1][np.argmax(y[0])]
 
 
-                traces_out[k] = traces_out[k] - p(t)
+                    temp = temp - y_mode
+                # much more complex approach to piece-wise adjust the shift
+                else:
+                    for q in range(0, temp.shape[0], self.mode_window):
+                        y = np.histogram(temp[q:q+self.mode_window], bins=np.arange(-1, 1, 0.001))
+                        y_mode = y[1][np.argmax(y[0])]
+                        #y_mode = scipy.stats.mode()[0]
+                        temp[q:q+self.mode_window] = temp[q:q+self.mode_window] - y_mode
 
-            if self.detrend_model_order >2:
-                temp = butter_lowpass_filter(temp,
-                                            0.01,
-                                            self.sample_rate,
-                                            order=5)
-
-                z = np.polyfit(t, temp, self.detrend_model_order)
-
-                p = np.poly1d(z)
-
-                # if k == 0:
-                #     plt.plot(t, p(t), c='black')
-
-                traces_out[k] = traces_out[k] - p(t)
-
-            # if k==0:
-            #     plt.plot(t,temp,c='blue')
-            #     plt.plot(t,p(t),c='red')
-
+                traces_out[k] = temp
+                #
 
         #
         return traces_out
+    #
+    # def filter_model(self, traces):
+    #     traces_out = traces.copy()
+    #     t = np.arange(traces[0].shape[0])
+    #     #print ("... TODO: automate the polynomial fit search using RMS optimization?!...")
+    #     #
+    #     for k in trange(traces.shape[0], desc='model filter: remove bleaching or trends'):
+    #         #
+    #         temp = traces[k]
+    #         # if k==0:
+    #         #     plt.plot(t,temp,c='blue')
+    #
+    #         if False:
+    #             temp = butter_highpass_filter(temp,
+    #                                          0.01,
+    #                                          self.sample_rate,
+    #                                          order=5)
+    #             std = np.std(temp)
+    #             idx = np.where(temp>(std*.1))[0]
+    #             idx2 = np.where(temp<=(std*.1))[0]
+    #             temp [idx] = np.median(temp[idx2])
+    #             #temp =  scipy.signal.medfilt(temp, kernel_size=1501)#[source]
+    #
+    #             if k==0:
+    #                 plt.plot(t, temp, c='green')
+    #
+    #             idx = np.where(np.abs(temp)<=(1*std))[0]
+    #
+    #         if False:
+    #             temp = butter_lowpass_filter(temp,
+    #                                          0.01,
+    #                                          self.sample_rate,
+    #                                          order=5)
+    #             #std = np.std(temp)
+    #             #idx = np.where(temp>(std*1))[0]
+    #             #idx2 = np.where(temp<=(std*1))[0]
+    #             #temp [idx] = np.median(temp[idx2])
+    #             #
+    #             z=[1,2]
+    #             while z[0]>1E-8:
+    #                 z = np.polyfit(t, temp, 1)
+    #                 #print ("slopes: ", z)
+    #                 p = np.poly1d(z)
+    #
+    #                 temp = temp - p(t)
+    #
+    #         # just fit line to median of first 10k points and last 10k points
+    #         if self.detrend_model_order==1:
+    #
+    #             median01 = np.array([np.median(temp[:10000]),
+    #                                 np.median(temp[-10000:])])
+    #             #median2= temp[-10000:]
+    #             t01 = np.array([0,temp.shape[0]-1])
+    #             #print (t01, median01)
+    #             z = np.polyfit(t01, median01, 1)
+    #
+    #             p = np.poly1d(z)
+    #
+    #             temp = temp - p(t)
+    #             traces_out[k] = traces_out[k] - p(t)
+    #
+    #         if self.detrend_model_order==2:
+    #             #temp = butter_lowpass_filter(temp,
+    #             #                             0.01,
+    #             #                             self.sample_rate,
+    #             #                             order=5)
+    #
+    #
+    #             z = np.polyfit(t, temp, 2)
+    #
+    #             p = np.poly1d(z)
+    #
+    #             if k == 0:
+    #                 plt.plot(t, p(t), c='black')
+    #
+    #
+    #             traces_out[k] = traces_out[k] - p(t)
+    #
+    #         if self.detrend_model_order >2:
+    #             temp = butter_lowpass_filter(temp,
+    #                                         0.01,
+    #                                         self.sample_rate,
+    #                                         order=5)
+    #
+    #             z = np.polyfit(t, temp, self.detrend_model_order)
+    #
+    #             p = np.poly1d(z)
+    #
+    #             # if k == 0:
+    #             #     plt.plot(t, p(t), c='black')
+    #
+    #             traces_out[k] = traces_out[k] - p(t)
+    #
+    #         # if k==0:
+    #         #     plt.plot(t,temp,c='blue')
+    #         #     plt.plot(t,p(t),c='red')
+    #
+    #
+    #     #
+    #     return traces_out
 
     def median_filter(self,traces):
 
@@ -618,6 +674,7 @@ class Calcium():
         #
         if os.path.exists(fname_out) and self.recompute_binarization==False:
             data = np.load(fname_out, allow_pickle=True)
+            self.F = data["F_raw"]
             self.F_onphase_bin = data['F_onphase']
             self.F_upphase_bin = data['F_upphase']
             self.spks = data['spks']
@@ -630,6 +687,8 @@ class Calcium():
             self.F_filtered = data['F_filtered']
             self.F_processed = data['F_processed']
             self.spks_x_F = data['oasis_x_F']
+            self.dff = data['DFF']
+            self.F_detrended = data['F_detrended']
 
             # parameters saved to file as dictionary
             self.oasis_thresh_prefilter = data['oasis_thresh_prefilter']
@@ -723,7 +782,7 @@ class Calcium():
         self.footprints_bin = imgs_bin
 
 
-    def show_rasters(self):
+    def show_rasters(self, save_image=False):
 
         idx = np.where(self.F_upphase_bin==1)
 
@@ -731,12 +790,13 @@ class Calcium():
         img = np.zeros((self.F_onphase_bin.shape[0], 
                         self.F_onphase_bin.shape[1]))
 
-        #
+        # increase width of all spikes
+        width = 5
         for k in range(idx[0].shape[0]):
-            img[idx[0][k],idx[1][k]-5: idx[1][k]+5]=1
+            img[idx[0][k],idx[1][k]-width: idx[1][k]+width]=1
 
         #
-        plt.figure()
+        plt.figure(figsize=(25,12.5))
         plt.imshow(img, aspect='auto',
                    cmap='Greys',
                    extent=[0,img.shape[1]/self.sample_rate,
@@ -748,23 +808,86 @@ class Calcium():
         plt.title("Spike threshold: "+str(self.min_thresh_std_upphase)+
                   ", lowpass filter cutoff (hz): " +str(self.high_cutoff)+
                   ", detrend polynomial model order: "+str(self.detrend_model_order))
-        plt.show()
+        plt.suptitle(self.data_dir)
+
+        if save_image:
+            plt.savefig(os.path.join(self.data_dir,'figures','rasters.png'),dpi=300)
+        plt.close()
+        #plt.show()
 
     
 
+    def binarize_onphase2(self,
+                         traces,
+                         min_width_event,
+                         min_thresh_std,
+                         text=''):
+        '''
+           Function that converts continuous float value traces to
+           zeros and ones based on some threshold
+
+           Here threshold is set to standard deviation /10.
+
+            Retuns: binarized traces
+        '''
+        #
+        traces_bin = traces.copy()
+
+        #
+        for k in trange(traces.shape[0], desc='binarizing continuous traces '+text):
+            temp = traces[k].copy()
+
+            # find threshold crossings standard deviation based
+            #print ("using threshold: ", min_thresh_std, "val_scale: ", val)
+            idx1 = np.where(temp>=self.thresholds[k])[0]  # may want to use absolute threshold here!!!
+
+            #
+            temp = temp*0
+            temp[idx1] = 1
+
+            # FIND BEGINNIGN AND ENDS OF FLUORescence above some threshold
+            from scipy.signal import chirp, find_peaks, peak_widths
+            peaks, _ = find_peaks(temp)  # middle of the pluse/peak
+            widths, heights, starts, ends = peak_widths(temp, peaks)
+
+            #
+            xys = np.int32(np.vstack((starts, ends)).T)
+            idx = np.where(widths < min_width_event)[0]
+            #print ("# evetns too short ", idx.shape, min_width_event)
+            xys = np.delete(xys, idx, axis=0)
+
+            traces_bin[k] = traces_bin[k]*0
+
+            # fill the data with 1s
+            buffer = 0
+            for p in range(xys.shape[0]):
+                traces_bin[k,xys[p,0]:xys[p,1]+buffer] = 1
+
+            # if k==3:
+            #     plt.figure()
+            #     plt.plot(temp)
+            #     plt.plot(traces_bin[k])
+            #     plt.show()
+            #     print ("ycomputed: ", traces_bin[k])
+            #     #print (temp.shape, traces_bin.shape)
+
+        return traces_bin
+
     def binarize_fluorescence(self):
 
+        #
         fname_out = os.path.join(self.data_dir,
                                  'binarized_traces.npz'
                                  )
 
+        #
         if os.path.exists(fname_out)==False or self.recompute_binarization:
 
             ####################################################
             ########### FILTER FLUROESCENCE TRACES #############
             ####################################################
 
-
+            #
             if self.verbose:
                 print ('')
                 print ("  Binarization parameters: ")
@@ -779,58 +902,59 @@ class Calcium():
                 print ("        min_event_amplitude: ", self.min_event_amplitude)
 
 
-            #
-            if False:
-                # self.F_filtered = self.band_pass_filter(self.F)  # This generates lots of butterworth filter artifacts
-                self.F_filtered = self.low_pass_filter(self.F)
-                # remove median
-                self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
+            # compute DF/F on raw data, important to get correct SNR values
+            self.f0s = np.median(self.F, axis=1)
+            self.dff = (self.F-self.f0s[:,None])/self.f0s[:,None]
 
             #
+            if True:
+                self.F_filtered = self.low_pass_filter(self.dff)
             else:
-                #
-                self.F_filtered = self.low_pass_filter(self.F)
-                self.F_filtered_saved = self.F_filtered.copy()
-                self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
+                self.F_filtered = self.dff
 
-                # self.F_filtered = self.high_pass_filter(self.F_filtered)
-                #self.F_filtered = self.band_pass_filter(self.F)
-                self.F_filtered = self.filter_model(self.F_filtered)
+            #
+            if self.remove_ends:
+                # self.F_filtered[:, :300] = np.random.rand(300)
+                self.F_filtered[:, :300] = (np.random.rand(300) - 0.5) / 100  # +self.F_filtered[300]
+                self.F_filtered[:, -300:] = (np.random.rand(300) - 0.5) / 100
+            self.F_filtered_saved = self.F_filtered.copy()
 
-                # remove baseline again
-                self.F_filtered -= np.median(self.F_filtered, axis=1)[None].T
-
-
-                #self.F_filtered = self.detrend(self.F_filtered)
-                # self.F_filtered = self.median_filter(self.F_filtered)
-
-                # use wavelet transforms to remove lower frequency/trends
-                #self.F_filtered = self.wavelet_filter(self.F_filtered)
-
-                # remove
+            # apply detrending
+            self.F_filtered = self.detrend_traces(self.F_filtered)
+            self.F_detrended = self.F_filtered.copy()
 
             ####################################################
             ###### BINARIZE FILTERED FLUORESCENCE ONPHASE ######
             ####################################################
             # compute global std on filtered/detrended signal
-            std_global, self.F_filtered = self.compute_std_global(self.F_filtered)
+            # OLD METHOD of findnig threholds for all cells based on distribution of STDs
+            #std_global = self.compute_std_global(self.F_detrended)
+            #
 
             #
-            self.stds = np.zeros(self.F_filtered.shape[0])+std_global
+            if True:
+                self.thresholds = parmap.map(find_threshold_by_gaussian_fit_parallel,
+                                             self.F_detrended,
+                                             self.percentile_threshold,
+                                             self.dff_min,
+                                             pm_processes = 16,
+                                             pm_pbar=True)
+
+            else:
+                self.thresholds = find_threshold_by_gaussian_fit(self.F_detrended, self.percentile_threshold)
 
             #
-            self.F_onphase_bin = self.binarize_onphase(self.F_filtered,
-                                                       self.stds,
-                                                       self.min_width_event_onphase,
-                                                       self.min_thresh_std_onphase,
-                                                       'filtered fluorescence onphase')
+            self.F_onphase_bin = self.binarize_onphase2(self.F_detrended,
+                                                        self.min_width_event_onphase,
+                                                        self.min_thresh_std_onphase,
+                                                        'filtered fluorescence onphase')
 
             # detect onset of ONPHASE to ensure UPPHASES overlap at least in one location with ONPHASE
             def detect_onphase(traces):
                 a = traces.copy()
                 locs = []
                 for k in range(a.shape[0]):
-                    idx = np.where((a[k][1:]-a[k][:-1])==1)[0]
+                    idx = np.where((a[k][1:] - a[k][:-1]) == 1)[0]
                     locs.append(idx)
 
                 locs = np.array(locs, dtype=object)
@@ -843,94 +967,37 @@ class Calcium():
             ####################################################
             # THIS STEP SOMETIMES MISSES ONPHASE COMPLETELY DUE TO GRADIENT;
             # So we minimally add onphases from above
-            self.der = np.float32(np.gradient(self.F_filtered,
-                                         axis=1))
+            self.der = np.float32(np.gradient(self.F_detrended,
+                                              axis=1))
             self.der_min_slope = 0
             idx = np.where(self.der <= self.der_min_slope)
             F_upphase = self.F_filtered.copy()
-            F_upphase[idx]=0
+            F_upphase[idx] = 0
+            self.stds = [None, None]
+            #
+            self.F_upphase_bin = self.binarize_onphase2(F_upphase,
+                                                        self.min_width_event_upphase,
+                                                        self.min_thresh_std_upphase,
+                                                        'filtered fluorescence upphase')
+
+            print("   Oasis based binarization skipped by default ... ")
+            self.spks = np.nan
+            self.spks_smooth_bin = np.nan
+            self.spks_upphase_bin = np.nan
+            self.oasis_x_F = np.nan
+            self.spks_x_F = np.nan
 
             #
-            self.F_upphase_bin = self.binarize_onphase(F_upphase,
-                                                       self.stds,    # use the same std array as for full Fluorescence
-                                                       self.min_width_event_upphase,
-                                                       self.min_thresh_std_upphase,
-                                                       'filtered fluorescence upphase')
-
-            # make sure that upphase data has at least one onphase start
-            # some of the cells miss this
-            for k in range(len(onphases)):
-                idx = np.int32(onphases[k])
-                for id_ in idx:
-                    self.F_upphase_bin[k,id_:id_+2] = 1
-
-            ############################################################
-            ################## THRESHOLD RAW OASIS #####################
-            ############################################################
-            #try:
-            if False:
-                for k in range(self.spks.shape[0]):
-                    # idx = np.where(c.spks_filtered[k]<self.stds[k]*1.0)[0]
-                    idx = np.where(self.spks[k] < self.oasis_thresh_prefilter)[0]
-                    self.spks[k, idx] = 0
-
-                ############################################################
-                ################# SMOOTH OASIS SPIKES ######################
-                ############################################################
-                # self.spks_filtered = self.smooth_traces(self.spks, F_detrended)
-                self.spks_filtered = self.smooth_traces(self.spks,
-                                                        self.F_filtered)
-
-                #################################################
-                ##### SCALE OASIS BY FLUORESCENCE ###############
-                #################################################
-                self.spks_x_F = self.spks_filtered * self.F_filtered
-
-                ############################################################
-                ###### UPPHASE DETECTION ON OASIS SMOOTH/SCALED DATA #######
-                ############################################################
-                der = np.float32(np.gradient(self.spks_x_F,
-                                             axis=1))
-                #
-                idx = np.where(der <= 0)
-
-                #
-                spks_upphase = self.spks_x_F.copy()
-                spks_upphase[idx]=0
-
-                # compute some measure of signal quality
-                #sq = stds_all(spks_upphase)
-                #print ('SQ: spikes :', sq)
-                spks_upphase2 = spks_upphase.copy()
-                spks_upphase2[idx] = np.nan
-                stds = np.nanstd(spks_upphase2, axis=1)
-
-                self.spks_upphase_bin = self.binarize_onphase(spks_upphase,
-                                                              stds,
-                                                              #self.min_width_event // 3,
-                                                              self.min_width_event_oasis,
-                                                              self.min_thresh_std_oasis)
-
-                ############################################################
-                ############# CUMULATIVE OASIS SCALING #####################
-                ############################################################
-                self.spks_smooth_bin = self.scale_binarized(self.spks_upphase_bin,
-                                                             self.spks)
-            else:
-            #except:
-                print("   Oasis based binarization skipped by default ... ")
-                self.spks = np.nan
-                self.spks_smooth_bin = np.nan
-                self.spks_upphase_bin = np.nan
-                self.oasis_x_F = np.nan
-                self.spks_x_F = np.nan
+            self.F_processed = self.F_filtered
 
             #
             if self.save_python:
                 np.savez(fname_out,
                      # binarization data
+                     F_raw = self.F,
                      F_filtered = self.F_filtered_saved,
-                     F_processed = self.F_filtered,
+                     F_detrended = self.F_detrended,
+                     #F_processed = self.F_filtered,
                      F_onphase=self.F_onphase_bin,
                      F_upphase=self.F_upphase_bin,
                      stds = self.stds,
@@ -942,8 +1009,8 @@ class Calcium():
                      low_cutoff = self.low_cutoff,
                      detrend_model_order= self.detrend_model_order,
 
+                     #
                      oasis_x_F = self.spks_x_F,
-
                      # parameters saved to file as dictionary
                      oasis_thresh_prefilter=self.oasis_thresh_prefilter,
                      min_thresh_std_oasis=self.min_thresh_std_oasis,
@@ -953,6 +1020,7 @@ class Calcium():
                      min_width_event_upphase=self.min_width_event_upphase,
                      min_width_event_oasis=self.min_width_event_oasis,
                      min_event_amplitude=self.min_event_amplitude,
+                     DFF = self.dff
                      )
 
             #
@@ -968,7 +1036,7 @@ class Calcium():
                       "stds": self.stds,
                       "derivative":  self.der,
                       "der_min_slope": self.der_min_slope,
-                      
+
                      # raw and filtered data;
                      "F_filtered":self.F_filtered,
                      "oasis_x_F": self.spks_x_F,
@@ -984,6 +1052,84 @@ class Calcium():
                      "min_event_amplitude":self.min_event_amplitude,
                       }
                                  )
+
+    def save_sample_traces(self):
+
+        try:
+            os.mkdir(os.path.join(self.data_dir,'figures'))
+        except:
+            pass
+
+        #
+        idx = np.random.choice(self.F_filtered.shape[0], 20, replace=False)
+
+        ####################################################
+        plt.figure(figsize=(25,12.5))
+        t = np.arange(self.F_filtered.shape[1]) / self.sample_rate
+
+        #
+        ctr = 0
+        spacing = 10
+        scale=15
+        for cell_id in idx:
+            yy = np.array([.5,.5])*scale+ctr*spacing
+            #print (yy)
+            plt.plot([t[0],t[-1]],[yy[0],yy[1]], '--', linewidth=1, label='100%', alpha=.8, c='grey')
+            plt.plot(t, self.F_detrended[cell_id]*scale+ctr*spacing, linewidth=1, label='detrended', alpha=.8, c='blue')
+
+            plt.plot(t, self.F_onphase_bin[cell_id] * .3 * scale +ctr*spacing, linewidth=1, label='onphase', alpha=.4,
+                     c='orange')
+            plt.plot(t, self.F_upphase_bin[cell_id] * scale*.4 +ctr*spacing, linewidth=1, label='upphase', alpha=.4,
+                     c='green')
+            ctr+=1
+
+        #plt.legend(fontsize=20)
+        xticks = np.arange(0, ctr*spacing,spacing)
+        plt.yticks(xticks, idx)
+        plt.ylabel("Neuron id")
+        plt.xlabel("Time (sec)")
+        plt.xlim(t[0], t[-1])
+        plt.title(self.data_dir)
+        plt.suptitle("DFF PLOT (dashed lines are 50% DFF)")
+        plt.savefig(os.path.join(self.data_dir,'figures',"sample_traces.png"),dpi=300)
+        plt.close()
+
+        plt.figure(figsize=(25,12.5))
+        ax=plt.subplot(111)
+        t = np.arange(self.F_filtered.shape[1]) / self.sample_rate
+
+        ctr = 0
+        scale=4
+        for cell_id in idx:
+            temp = self.F_detrended[cell_id]
+            y = np.histogram(temp, bins=np.arange(-1, 1, 0.001))
+            y_mode = y[1][np.argmax(y[0])]
+            temp = (temp-y_mode)/(np.max(temp)-y_mode)
+            std = np.std(temp)
+            mean = np.mean(temp)
+
+            plt.plot(t, temp*scale + ctr * spacing, linewidth=1, label='detrended', alpha=.8, c='blue')
+            ax.fill_between(t, (mean + std)*scale+ctr*spacing, (mean - std)*scale+ctr*spacing, color='grey', alpha=0.4)
+
+            plt.plot(t, self.F_onphase_bin[cell_id] * .9 * scale + ctr *spacing, linewidth=1, label='onphase', alpha=.4,
+                     c='orange')
+            plt.plot(t, self.F_upphase_bin[cell_id] * scale + ctr * spacing, linewidth=1, label='upphase', alpha=.4,
+                     c='green')
+
+            ctr += 1
+
+        # plt.legend(fontsize=20)
+        plt.title(self.data_dir)
+        plt.suptitle("Normalized Plots to max DFF (grey shading is std)")
+        xticks = np.arange(0, ctr*spacing,spacing)
+        plt.yticks(xticks, idx)
+        plt.ylabel("Neuron id")
+        plt.xlabel("Time (sec)")
+        plt.xlim(t[0], t[-1])
+        plt.savefig(os.path.join(self.data_dir, 'figures', "sample_traces_normalized.png"), dpi=300)
+        plt.close()
+
+        #plt.show()
 
 
     #
@@ -1743,6 +1889,60 @@ def del_highest_connected_nodes(nn, c):
     return good_cells, removed_cells
 
 
+def find_threshold_by_gaussian_fit_parallel(F_detrended,
+                                            percentile_threshold,
+                                            snr_min):
+
+    ''' Function fits a gaussian to the left (lower) part of the [ca] value distrbition centred on the mode
+        it then sets the thrshold based on the
+
+    '''
+
+    # OPTION 1: MEAN MIRRORIING
+    try:
+        y = np.histogram(F_detrended, bins=np.arange(-5, 5, 0.001))
+        y_mode = y[1][np.argmax(y[0])]
+
+        idx = np.where(F_detrended <= y_mode)[0]
+        pts_neg = F_detrended[idx]
+        pts_pos = -pts_neg.copy()
+
+        pooled = np.hstack((pts_neg, pts_pos))
+
+        #
+        norm = NormalDist.from_samples(pooled)
+        mu = norm.mean
+        sigma = norm.stdev
+
+        #
+        x = np.arange(-10, 10, 0.001)
+        y_fit = stats.norm.pdf(x, mu, sigma)
+        y_fit = y_fit / np.max(y_fit)
+
+        #
+        cumsum = np.cumsum(y_fit)
+        cumsum = cumsum / np.max(cumsum)
+
+        # thresh_max = max(snr_min, percentile_threshold)
+        # print ("snr mind: ", snr_min, ", percetile thoreshold: ", percentile_threshold)
+        idx = np.where(cumsum > percentile_threshold)[0]
+
+        #
+        thresh = x[idx[0]]
+
+    except:
+        print ("error data corrupt: data: ", F_detrended)
+        thresh = 0
+
+    # gently scale the mode based threshold to also account for lower std values.
+    if False:
+        thresh = thresh*np.std(F_detrended)
+
+    #
+    thresh_max = max(thresh, snr_min)
+    #print ("threshold: ", thresh, "snr min: ", snr_min)
+
+    return thresh_max
 #
 def del_lowest_snr(nn, c):
 
@@ -2506,4 +2706,80 @@ def load_PCA2(root_dir,
 
     return pca, X_pca
 
-    
+
+def find_threshold_by_gaussian_fit(F_filtered, percentile_threshold):
+    ''' Function fits a gaussian to the left (lower) part of the [ca] value distrbition centred on the mode
+        it then sets the thrshold based on the
+
+    '''
+
+    # print ("fitting guassian to compute f0:...")
+    from statistics import NormalDist, mode
+    thresholds = []
+    for k in trange(F_filtered.shape[0], desc='fitting mode to physics'):
+
+        # F_filtered2 = butter_lowpass_filter(F_filtered[k],0.02,30,1)
+        F_filtered2 = F_filtered[k]
+
+        #
+        if self.show_plots:
+            y = np.histogram(F_filtered2, bins=np.arange(-8, 16, 0.1))
+
+            x = y[1][:-1]
+            y = y[0] / np.max(y[0])  # / self.F_upphase_bin[k].shape[0] * 1000
+            #
+            plt.figure()
+            plt.plot(x, y)
+            # plt.show()
+
+        # OPTION 1: MEAN MIRRORIING
+        if False:
+            mean = np.mean(F_filtered2)
+            idx = np.where(F_filtered2 <= mean)[0]
+            pts_neg = F_filtered2[idx]
+            pts_pos = -pts_neg.copy()
+
+            pooled = np.hstack((pts_neg, pts_pos))
+
+        else:
+            y_mode = scipy.stats.mode(F_filtered2)[0]
+            idx = np.where(F_filtered2 <= y_mode)[0]
+            pts_neg = F_filtered2[idx]
+            pts_pos = -pts_neg.copy()
+
+            pooled = np.hstack((pts_neg, pts_pos))
+
+            if self.show_plots:
+                plt.plot([y_mode, y_mode], [0, 1], '--')
+
+        #
+        norm = NormalDist.from_samples(pooled)
+        mu = norm.mean
+        sigma = norm.stdev
+
+        #
+        x = np.arange(-8, 16, 0.0001)
+        y_fit = stats.norm.pdf(x, mu, sigma)
+        y_fit = y_fit / np.max(y_fit)
+
+        #
+        cumsum = np.cumsum(y_fit)
+        cumsum = cumsum / np.max(cumsum)
+        print("cumsum: ", cumsum)
+        # plt.figure()
+        if self.show_plots:
+            plt.plot(x, y_fit)
+        # plt.show()
+
+        idx = np.where(cumsum > percentile_threshold)[0]
+
+        #
+
+        #
+        thresh = x[idx[0]]
+        # print ("threshold: ", thresh)
+        if self.show_plots:
+            plt.plot([thresh, thresh], [0, 1], '--')
+        thresholds.append(thresh)
+
+    return thresholds

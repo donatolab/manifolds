@@ -4,7 +4,20 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b815b19d-cc94-437c-97ff-ffc3f0372acd" name="Changes" comment="" />
+    <list default="true" id="b815b19d-cc94-437c-97ff-ffc3f0372acd" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/binarization/Binarize_Suite2p_multi_sessions.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/binarization/Binarize_Suite2p_single_session.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/correlation/Compute_pairwise_correlations_parallel.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/correlation/Compute_pairwise_correlations_parallel.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/correlation/Compute_pairwise_correlations_single_session.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/correlation/Compute_pairwise_correlations_single_session.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/intrinsic_dynamics_project/compute_pca.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/intrinsic_dynamics_project/compute_pca.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/intrinsic_dynamics_project/rsync_all_mice.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/intrinsic_dynamics_project/rsync_all_mice.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo_1P_data_visualize.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo_1P_data_visualize.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/opexebo_place_field_analysis/utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/calcium/calcium.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/calcium/calcium.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/volition/decode_stationary.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/volition/decode_stationary.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/volition/utils_nathalie.py" beforeDir="false" afterPath="$PROJECT_DIR$/volition/utils_nathalie.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />

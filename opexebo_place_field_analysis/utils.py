@@ -1999,7 +1999,8 @@ def load_cell(root_dir,
 
 def plot_contours(root_dir,
                   animal_id,
-                  session_id):
+                  session_id,
+                  std_threshold):
 
     #
     cells, occ_map = return_cells(root_dir,
@@ -2008,11 +2009,11 @@ def plot_contours(root_dir,
 
     #
     plt.figure()
-    threshold = 3
+    #threshold = 3
     ctr = 0
     for cell in cells:
         if True:
-            if cell["spatial_info_zscores"][0] < threshold:
+            if cell["spatial_info_zscores"][0] < std_threshold:
                 continue
             ctr += 1
 
@@ -2022,10 +2023,14 @@ def plot_contours(root_dir,
             thresh = 1
             _, thresh_img = cv2.threshold(img_grey, thresh, 255, cv2.THRESH_BINARY)
             contours, _ = cv2.findContours(thresh_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            contours = contours[0].squeeze()
-            contours = np.append(contours, contours[0][None], axis=0)
-            plt.plot(contours[:, 0], contours[:, 1],
-                     linewidth=3)
+
+            try:
+                contours = contours[0].squeeze()
+                contours = np.append(contours, contours[0][None], axis=0)
+                plt.plot(contours[:, 0], contours[:, 1],
+                         linewidth=3)
+            except:
+                pass
         #except:
         #    pass
 
