@@ -111,7 +111,7 @@ class Calcium():
 
         #
         self.parallel = True
-        self.n_cores = 4
+        self.n_cores = 16
 
         # check if some of the cells have 0-std in which case they should be removed
         self.check_zero_cells = True
@@ -333,6 +333,7 @@ class Calcium():
 
         plt.xlabel("Time (sec)")
         plt.xlim(t[0], t[-1])
+        plt.suptitle(self.data_dir)
         plt.show()
     
     #
@@ -515,7 +516,7 @@ class Calcium():
                 # much more complex approach to piece-wise adjust the shift
                 else:
                     for q in range(0, temp.shape[0], self.mode_window):
-                        y = np.histogram(temp[q:q+self.mode_window], bins=np.arange(-1, 1, 0.001))
+                        y = np.histogram(temp[q:q+self.mode_window], bins=np.arange(-5, 5, 0.001))
                         y_mode = y[1][np.argmax(y[0])]
                         #y_mode = scipy.stats.mode()[0]
                         temp[q:q+self.mode_window] = temp[q:q+self.mode_window] - y_mode
@@ -810,9 +811,11 @@ class Calcium():
                   ", detrend polynomial model order: "+str(self.detrend_model_order))
         plt.suptitle(self.data_dir)
 
-        if save_image:
+        if save_image==True:
             plt.savefig(os.path.join(self.data_dir,'figures','rasters.png'),dpi=300)
-        plt.close()
+            plt.close()
+        else:
+            plt.show()
         #plt.show()
 
     
@@ -917,6 +920,8 @@ class Calcium():
                 # self.F_filtered[:, :300] = np.random.rand(300)
                 self.F_filtered[:, :300] = (np.random.rand(300) - 0.5) / 100  # +self.F_filtered[300]
                 self.F_filtered[:, -300:] = (np.random.rand(300) - 0.5) / 100
+
+            #
             self.F_filtered_saved = self.F_filtered.copy()
 
             # apply detrending
@@ -980,7 +985,7 @@ class Calcium():
                                                         self.min_thresh_std_upphase,
                                                         'filtered fluorescence upphase')
 
-            print("   Oasis based binarization skipped by default ... ")
+            #print("   Oasis based binarization skipped by default ... ")
             self.spks = np.nan
             self.spks_smooth_bin = np.nan
             self.spks_upphase_bin = np.nan
@@ -997,7 +1002,7 @@ class Calcium():
                      F_raw = self.F,
                      F_filtered = self.F_filtered_saved,
                      F_detrended = self.F_detrended,
-                     #F_processed = self.F_filtered,
+                     F_processed = self.F_filtered,
                      F_onphase=self.F_onphase_bin,
                      F_upphase=self.F_upphase_bin,
                      stds = self.stds,
@@ -1722,7 +1727,8 @@ class Calcium():
 
             # compute correlations between neurons
             if self.correlation_datatype == 'filtered':
-                rasters = self.F_filtered   # use fluorescence filtered traces
+                #rasters = self.F_filtered   # use fluorescence filtered traces
+                rasters = self.F_detrended   # use fluorescence filtered traces
             elif self.correlation_datatype == 'upphase':
                 rasters = self.F_upphase_bin
             else:
@@ -1738,7 +1744,7 @@ class Calcium():
             self.corrs = np.load(fname_out)
 
         ########## MAKE CORRELATION ARRAY #########
-        if os.path.exists(fname_out_array) == False:
+        if os.path.exists(fname_out_array) == False or self.recompute_correlation:
 
             # make the final correlation array
             self.corr_array = make_correlation_array(self.corrs, self.F_upphase_bin.shape[0])
@@ -1760,7 +1766,7 @@ class Calcium():
                                  )
 
         #
-        if os.path.exists(fname_clean_corr_array)==False:
+        if os.path.exists(fname_clean_corr_array)==False or self.recompute_deduplication:
 
             # elif self.deduplication_method == 'overlap':
             self.df_overlaps = generate_cell_overlaps(self)
@@ -2107,8 +2113,12 @@ def correlations_parallel(ids, rasters, subsample=5):
         #
         for p in range(rasters.shape[0]):
             temp2 = rasters[p][::5]
-            corr = scipy.stats.pearsonr(temp1,
+            try:
+                corr = scipy.stats.pearsonr(temp1,
                                         temp2)
+            except:
+                print ("corr not defined: ")
+                corr = [0,1]
 
             corrs.append([k, p, corr[0], corr[1]])
     
