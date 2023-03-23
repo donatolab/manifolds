@@ -6,11 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="b815b19d-cc94-437c-97ff-ffc3f0372acd" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/binarization/Binarize_Suite2p_animal_V2.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/binarization/Binarize_Suite2p_animal_V2.ipynb" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/binarization/Binarize_Suite2p_session_V2.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/binarization/Binarize_Suite2p_session_V2.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/correlation/Compute_pairwise_correlations_parallel.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/correlation/Compute_pairwise_correlations_parallel.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/correlation/Compute_pairwise_correlations_single_session.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/correlation/Compute_pairwise_correlations_single_session.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scicore/scicore_copy_mesc.ipynb" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/utils/calcium/calcium.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/calcium/calcium.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />

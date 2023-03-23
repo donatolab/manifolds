@@ -1034,16 +1034,30 @@ class Calcium():
 
                 scipy.io.savemat(fname_out.replace('npz','mat'),
                      # binarization data
-                     {"F_onphase":self.F_onphase_bin,
+                     {""
+                      "F_onphase":self.F_onphase_bin,
                       "F_upphase":self.F_upphase_bin,
                       "spks":self.spks,
                       "spks_smooth_upphase":self.spks_smooth_bin,
-                      "stds": self.stds,
+                      #"stds": self.stds,
                       "derivative":  self.der,
                       "der_min_slope": self.der_min_slope,
 
+                      # binarization data
+                     "F_raw": self.F,
+
+                      "F_detrended": self.F_detrended,
+
+                      "spks":self.spks,
+                      "high_cutoff": self.high_cutoff,
+                      "low_cutoff": self.low_cutoff,
+                      "detrend_model_order": self.detrend_model_order,
+
+                      # parameters saved to file as dictionary
+                      "DFF": self.dff,
+
                      # raw and filtered data;
-                     "F_filtered":self.F_filtered,
+                     "F_filtered":self.F_filtered_saved,
                      "oasis_x_F": self.spks_x_F,
 
                      # parameters saved to file as dictionary
