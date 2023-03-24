@@ -510,9 +510,8 @@ class Calcium():
                 if self.mode_window == None:
                     y = np.histogram(temp, bins=np.arange(-1, 1, 0.001))
                     y_mode = y[1][np.argmax(y[0])]
-
-
                     temp = temp - y_mode
+
                 # much more complex approach to piece-wise adjust the shift
                 else:
                     for q in range(0, temp.shape[0], self.mode_window):
@@ -823,7 +822,7 @@ class Calcium():
     def binarize_onphase2(self,
                          traces,
                          min_width_event,
-                         min_thresh_std,
+                         #min_thresh_std,
                          text=''):
         '''
            Function that converts continuous float value traces to
@@ -909,11 +908,8 @@ class Calcium():
             self.f0s = np.median(self.F, axis=1)
             self.dff = (self.F-self.f0s[:,None])/self.f0s[:,None]
 
-            #
-            if True:
-                self.F_filtered = self.low_pass_filter(self.dff)
-            else:
-                self.F_filtered = self.dff
+            # low pass filter data
+            self.F_filtered = self.low_pass_filter(self.dff)
 
             #
             if self.remove_ends:
@@ -951,7 +947,7 @@ class Calcium():
             #
             self.F_onphase_bin = self.binarize_onphase2(self.F_detrended,
                                                         self.min_width_event_onphase,
-                                                        self.min_thresh_std_onphase,
+                                                        #self.min_thresh_std_onphase,
                                                         'filtered fluorescence onphase')
 
             # detect onset of ONPHASE to ensure UPPHASES overlap at least in one location with ONPHASE
@@ -982,8 +978,9 @@ class Calcium():
             #
             self.F_upphase_bin = self.binarize_onphase2(F_upphase,
                                                         self.min_width_event_upphase,
-                                                        self.min_thresh_std_upphase,
-                                                        'filtered fluorescence upphase')
+                                                        #self.min_thresh_std_upphase,
+                                                        'filtered fluorescence upphase'
+                                                        )
 
             #print("   Oasis based binarization skipped by default ... ")
             self.spks = np.nan

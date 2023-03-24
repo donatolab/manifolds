@@ -398,7 +398,8 @@ class Treadmill():
         # std_threshold = 2.5
 
         idx = np.where(np.abs(self.zscore[self.session_id]) >= self.std_threshold)[0]
-        print ("idx: ", idx)
+        #print ("idx of cells > threshold zscore ", idx)
+        self.cell_ids_above_threshold = idx
 
         plt.figure()
         plt.title("Zscore distributions - Seg " + str(self.session_names[self.session_id]) + " , std threshold " + str(
@@ -882,6 +883,7 @@ def reload_names():
         ["A", "B", "A'"]
     ]
 
+    #
     return fname_tracks, fnames_ca, segment_order
 
 
