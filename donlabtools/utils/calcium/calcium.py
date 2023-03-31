@@ -19,8 +19,8 @@ from scipy.signal import butter, sosfilt, sosfreqz
 from sklearn import datasets, linear_model
 from scipy import stats
 
-from utils.wheel import wheel
-from utils.calcium import calcium
+#from utils.wheel import wheel
+#from utils.calcium import calcium
 #from utils.animal_database import animal_database
 from statistics import NormalDist#, mode
 from scipy.stats import mode
@@ -34,7 +34,7 @@ import sys
 module_path = os.path.abspath(os.path.join('..'))
 sys.path.append(module_path)
 
-from utils.wheel import wheel
+#from utils.wheel import wheel
 
 
 #

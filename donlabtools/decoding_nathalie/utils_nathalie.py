@@ -3,10 +3,8 @@ import matplotlib.pyplot as plt
 
 # Computing
 import numpy as np
-from scipy import io
-from scipy import stats
-import sys
 import pickle
+import seaborn as sns
 
 
 # Files
@@ -25,7 +23,434 @@ from scipy.stats import norm
 from scipy.spatial.distance import cdist
 import numpy as np
 
+
+################################################# 
+################################################# 
+################################################# 
+
+class Animal():
+
+    def __init__(self,
+                 main_dir,
+                 animal_id,
+                 session_id):
+        
+        #
+        self.partition_size = 10
+
+
+        #
+        self.main_dir = main_dir
+        self.animal_id = animal_id
+        self.session_id = session_id
+
+#
+        self.root_dir = os.path.join(main_dir, animal_id)
+
+        # 
+        self.out_dir = os.path.join(self.root_dir, 
+                            self.session_id,
+                            "results")
+        
+
+        # make output directory
+        try:
+            os.mkdir(self.out_dir)
+        except:
+            pass
+
+        self.fname_csv = glob.glob(os.path.join(self.root_dir,
+                                    self.session_id,
+                                    "*0.csv"))[0]
+        self.fname_locs = self.fname_csv[:-4]+'_locs.npy'
+        self.fname_bin = glob.glob(os.path.join(self.root_dir,
+                                    self.session_id,
+                                    'binarized_traces.npz'))[0]
+        self.fname_start = os.path.join(self.root_dir,
+                                    self.session_id,
+                                    'start.txt')
+        
+
+        # process location csv
+        self.process_location_csv()
+
+        # process neural data
+        self.get_data_decoders_2D()
+
+        #from utils_nathalie import get_cmap_2d
+        self.cmap = get_cmap_2d(plot=False)
+
+        #
+        print ("...done...")
+
+    #
+    def compute_speed(self, smooth=True, frames_smooth=20):
+
+        # compute speed 
+        speed = compute_speed(self.locs_cm, smooth=True, frames_smooth=20)
+
+        self.mobile, self.idx_mob, self.idx_imm = is_mobile(speed, threshold=self.speed_threshold)
+
+
+    def get_data_decoders_2D(self):
+        
+        print ("...processing neural data...")
+
+        F_upphase, locs = load_tracks_2D(self.fname_locs,
+                                         self.fname_bin)
+            #print ("locs: ", locs.shape)
+        # partition space into specific parcels
+        F_upphase = F_upphase.T
+        F_upphase = F_upphase[0:36000]
+        #print ("F: ", F_upphase.shape)
+
+        # bin data
+        bin_size = 7
+        run_binnflag = False
+        if run_binnflag:
+            sum_flag = True
+            f_binned= run_binning(F_upphase, bin_size, sum_flag)
+        else:
+            f_binned = F_upphase
+        print (f_binned.shape)
+
+        # 
+        if run_binnflag:
+            sum_flag = False
+            locs_binned = run_binning(locs, bin_size, sum_flag)
+        else:
+            locs_binned = locs
+        #print ("locs_binned: ", locs_binned.shape)
+
+
+        # partition space 
+        box_width, box_length = 80, 80    # length in centimeters
+
+        # centre to 0,0
+        locs[:,0] = locs[:,0]-np.min(locs[:,0])
+        locs[:,1] = locs[:,1]-np.min(locs[:,1])
+
+        xmax = np.max(locs[:,0])
+        ymax = np.max(locs[:,1])
+        print (xmax,ymax)
+        pixels_per_cm = xmax / box_width
+
+        # convert DLC coords to cm
+        locs_cm = locs_binned/pixels_per_cm
+        #print ("locs_cm: ", locs_cm.shape)
+
+        # partiiont the square box;  # it will be a square array
+        # it just holds the numbers 1..64 for rexample, for an 8 x 8 partition
+        partition = np.zeros((box_width//self.partition_size, 
+                            box_width//self.partition_size),
+                            )
+
+        # it contains matching of pop vectors to a specific bin (ranging from 1..64)
+        locs_partitioned = np.zeros(locs_cm.shape[0])
+
+        # list of 64 lists containing the population vector identities for each bin location
+        partition_times = []
+
+        ctrx = 0
+        bin_ctr = 0
+        for x in range(0,box_width,self.partition_size):
+            idx = np.where(np.logical_and(locs_cm[:,0]>=x,
+                                        locs_cm[:,0]<x+self.partition_size))[0]
+            ctry = 0
+            for y in range(0,box_width,self.partition_size):
+                idy = np.where(np.logical_and(locs_cm[:,1]>=y,
+                                            locs_cm[:,1]<y+self.partition_size))[0]
+
+                # find intersection of idx and idy as the times when the mouse was in 
+                #   partition bin: ctrx, ctry
+                idx3 = np.intersect1d(idx, idy)
+                #print (idx3)
+                locs_partitioned[idx3]=bin_ctr
+
+                partition_times.append(idx3)    
+
+                #
+                partition[ctry,ctrx]=bin_ctr
+
+                #
+                ctry+=1
+                bin_ctr+=1
+
+            ctrx+=1
+
+        self.f_binned = self.f_filtered = self.neural_data = f_binned
+        self.locs_partitioned = locs_partitioned
+        self.partition_times = partition_times
+        self.partition = partition
+        self.box_width = box_width
+        self.box_length = box_length
+        self.locs_cm = locs_cm
+        #self.partition_size = partition_size
+
+
+        print ("DONE")
+        #return f_binned, locs_partitioned, partition_times, partition, box_width, box_length, locs_cm,partition_size
+
+    #
+    def bayesian_decoding(self):
+        
+        #
+        fname_out = os.path.join(self.root_dir,
+                            self.session_id,
+                            "bayes_decoder_place_cells_"+str(self.use_place_cells)+'.npz')
+
+
+        # trim longer results files [THIS SHOULD EVENTUALLY BE DONE PRE PROCESSING]
+        if self.f_binned.shape[0] < self.locs_partitioned.shape[0]:
+            #locs_partitioned = locs_partitioned[locs_partitioned.shape[0] - f_binned.shape[0]:]
+            self.locs_cm = self.locs_cm[self.locs_cm.shape[0] - self.f_binned.shape[0]:, :]
+
+        #
+        #############################################
+        if self.use_place_cells:
+            place_cells_dict = np.load(os.path.join(os.path.split(self.fname_locs)[0], 'place_cells.npy'), allow_pickle=True)
+            ids = []
+            for c in place_cells_dict:
+                ids.append(c['cell_id'])
+            #
+            place_cell_ids = np.hstack(ids)
+            #
+            self.neural_data_local = self.neural_data[:,place_cell_ids].copy()
+        else:
+            place_cell_ids = None
+            self.neural_data_local = self.neural_data.copy()
+
+        #############################################
+        #############################################
+        #############################################
+        # COMPUTE THE SPEED
+        # speed_threshold = 2 #Set a threshold for the speed
+        self.compute_speed()
+
+        #
+        x_mob = np.int32(self.neural_data_local[self.idx_mob])
+        y_mob = self.locs_cm[self.idx_mob]
+        print("Time moving: ", self.idx_mob.shape[0] / 20., 
+              ", time not moving: ", self.idx_imm.shape[0] / 20.)
+
+        #############################################
+        #############################################
+        #############################################
+        print("total time, total cells: ", x_mob.shape)
+        X_train, y_train, X_mobile_test, y_mobile_test = prepare_data3(x_mob, y_mob, 
+                                                                       self.data_split)
+        active_times_mobile, active_cells = find_active_times_and_cells(X_train,
+                                                                        min_spikes=25)
+
+
+
+        #
+        X_in = X_train[active_times_mobile][:, active_cells]
+        y_in = y_train[active_times_mobile]
+        self.y_train = y_in
+        
+        #
+        if self.shuffle:
+            y_in = np.roll(y_in, active_times_mobile.shape[0]//2,axis=0)
+
+        ##################################
+        ########### TRAIN MODEL ##########
+        ##################################
+        model_nb = NaiveBayesRegression(res=10)
+        model_nb.fit(X_in, y_in)
+
+        ########################################
+        ############ TEST MOBILE DATA ##########
+        ########################################
+        # TODO: prediction fucntion should not get ground truth!
+        active_times_test = get_active_frames(X_mobile_test[:,active_cells])
+        y_mobile_test = y_mobile_test[active_times_test]
+        X_mobile_test = X_mobile_test[active_times_test][:,active_cells]
+
+        # check if the test data is within 3 cm of the training data
+        if self.remove_nonvisited_locs:
+            idx_remove = []
+            for k in range(y_mobile_test.shape[0]):
+                loc = y_mobile_test[k]
+                dist = np.linalg.norm(loc-self.y_train,axis=1)
+                cl = np.min(dist)
+                if cl>3:
+                    print ("test removed from training set because too far ", cl , " cm")
+                    idx_remove.append(k)
+
+            # remove the bad indices
+            y_mobile_test = np.delete(y_mobile_test, idx_remove, axis=0)
+            X_mobile_test = np.delete(X_mobile_test, idx_remove, axis=0)
+
+        y_mobile_predicted = model_nb.predict(X_mobile_test,
+                                              y_mobile_test)
+
+        # Get the distance between the predicted value and the true value
+        distance_error_mobile = get_distance(y_mobile_test,
+                                             y_mobile_predicted)
+
+        ###############################################
+        ############# PREDICT IMMOBILE ###############
+        ###############################################
+        if self.predict_immobile:
+            x_immobile = np.int32(self.neural_data_local[self.idx_imm])
+            y_immobile_test = self.locs_cm[self.idx_imm]
+            active_times_immobile = get_active_frames(x_immobile)
+
+            #
+            y_immobile_predicted = model_nb.predict(x_immobile[active_times_immobile][:, active_cells],
+                                                    y_immobile_test)
+            distance_error_immobile = get_distance(y_immobile_test[active_times_immobile],
+                                                    y_immobile_predicted)
+        else:
+            distance_error_immobile = np.nan
+            y_immobile_predicted = np.nan
+            active_times_immobile = []
+
+        if self.plot_bayesian_decoding:
+            fig = plt.figure()
+            ax = sns.violinplot(data = distance_error_mobile, 
+                                showfliers=True,
+                                #showmeans=True,
+                                showmedians=True,)
+            plt.ylabel("Distance error (cm)")
+            plt.xlabel("Session")
+            plt.show()
+
+        ###############################################
+        ###############################################
+        ###############################################
+        self.distance_error_mobile = distance_error_mobile
+        self.distance_error_immobile = distance_error_immobile
+
+        if self.shuffle==False:
+            np.savez(fname_out,
+                        distance_error_mobile = distance_error_mobile,
+                        distance_error_immobile = distance_error_immobile,
+                        idx_imobile_absolute = self.idx_imm[active_times_immobile],  # this is the relative times of the stationary times
+                        locs_cm = self.locs_cm,
+                        neural_data = self.neural_data,
+
+                        #
+                        place_cell_ids = place_cell_ids,
+                        all_cell_ids = np.arange(self.neural_data.shape[1]),
+                        neural_data_shape = self.neural_data.shape,
+                        y_immobile_predicted = y_immobile_predicted,
+                        y_mobile_predicted = y_mobile_predicted,
+                        active_cells = active_cells,
+                        active_times_mobile = active_times_mobile,
+                        active_times_test = active_times_test,
+                        idx_mob = self.idx_mob,
+                        idx_imm = self.idx_imm,
+                        speed = self.speed_threshold,
+                        split = self.data_split,
+
+                        #
+                        partition = self.partition,
+                        partition_times = self.partition_times,
+                        partition_size = self.partition_size,
+                        locs_partitioned = self.locs_partitioned)
+
+            with open(fname_out[:-4]+'.pkl', 'wb') as outp:
+                #company1 = Company('banana', 40)
+                pickle.dump(model_nb, outp, pickle.HIGHEST_PROTOCOL)
+
+        else:
+            print ("Skipping save for shuffle condition...")
+        print ('')
+    
+
+    #
+    def process_location_csv(self):
+        print ("... processing location csv")
+        fname_csv = glob.glob(os.path.join(self.root_dir,
+                                    self.session_id,
+                                    "*0.csv"))[0]
+        # 
+        locs = load_csv(fname_csv)
+        body_feature_idx = 5*3+1
+        neck = np.float32(locs[3:,body_feature_idx:body_feature_idx+2])
+        np.save(fname_csv[:-4]+'_locs.npy', neck)
+    
+
+    #
+    def process_neural_data(self):
+
+
+        #Get the data in bins
+        (f_binned,
+            locs_partitioned,
+            partition_times,
+            partition,
+            box_width,
+            box_length,
+            locs_cm,
+            partition_size,
+            ) = get_data_decoders_2D(self.fname_locs,
+                                     self.fname_bin, 
+                                     partition_size=self.partition_size,)
+
+        # clip data to the same lengths
+        if f_binned.shape[0] < locs_partitioned.shape[0]:
+            locs_partitioned = locs_partitioned[locs_partitioned.shape[0]-f_binned.shape[0]:]
+            locs_cm = locs_cm[locs_cm.shape[0]-f_binned.shape[0]:,:]
+        
+        f_filtered = f_binned
+
+
+
+
+
+
+
+
+
+
+
+
+
+#
+def get_place_cell_ids(fname_in):
+    
+    d = np.load(fname_in, allow_pickle=True)
+    
+    cell_ids = []
+    for k in range(len(d)):
+        cell_ids.append(d[k]['cell_id'])
+
+    return np.int32(cell_ids)
+
+
+def get_cmap_2d(plot=False):
+    xlist = []
+    ylist = []
+    colorlist = []
+
+    for i in range(0, 8):
+        for j in range(0, 8):
+            xlist.append(i)
+            ylist.append(j)
+            if i > j:
+                colorlist.append(((float(32*i/255), float((255-32*i)/255), float(32*j/255))))
+            else:
+                colorlist.append(((float(32*i/255), float((255-32*j)/255), float(32*j/255))))
+
+    if plot:
+        fig = plt.figure(figsize=(4,4))
+        plt.scatter(xlist, ylist, c=colorlist, edgecolor='none',s=1000, marker='s')
+        plt.show()
+
+    cmap = plt.get_cmap('autumn_r')
+    cmaplist = [cmap(i) for i in range(cmap.N)]
+    cmap = cmap.from_list('Custom cmap', colorlist[0:], cmap.N)
+
+    
+    return cmap
+
+
 def preprocess_data2D(root_dir, session, fname_neural, fname_locs):
+
+    #
     raw_data = np.array(pd.read_csv(os.path.join(root_dir,session, fname_neural)))
     raw_data =  raw_data[:,1:-25]
     data2 = raw_data.transpose()
@@ -61,7 +486,7 @@ def preprocess_data2D(root_dir, session, fname_neural, fname_locs):
 
 
 def load_tracks_2D(fname_locs,
-                         fname_bin):
+                    fname_bin):
 
 
     #
@@ -82,96 +507,6 @@ def load_tracks_2D(fname_locs,
     print ("bin upphase: ", F_upphase.shape)
 
     return (F_upphase, locs)
-
-def get_data_decoders_2D(fname_locs,
-             fname_bin, partition_size=5):
-
-    F_upphase, locs = load_tracks_2D(fname_locs,
-                                           fname_bin)
-    #print ("locs: ", locs.shape)
-    # partition space into specific parcels
-    F_upphase = F_upphase.T
-    F_upphase = F_upphase[0:36000]
-    #print ("F: ", F_upphase.shape)
-
-    # bin data
-    bin_size = 7
-    run_binnflag = False
-    if run_binnflag:
-        sum_flag = True
-        f_binned= run_binning(F_upphase, bin_size, sum_flag)
-    else:
-        f_binned = F_upphase
-    print (f_binned.shape)
-
-    # 
-    if run_binnflag:
-        sum_flag = False
-        locs_binned = run_binning(locs, bin_size, sum_flag)
-    else:
-        locs_binned = locs
-    #print ("locs_binned: ", locs_binned.shape)
-
-
-    # partition space 
-    box_width, box_length = 80, 80    # length in centimeters
-
-    # centre to 0,0
-    locs[:,0] = locs[:,0]-np.min(locs[:,0])
-    locs[:,1] = locs[:,1]-np.min(locs[:,1])
-
-    xmax = np.max(locs[:,0])
-    ymax = np.max(locs[:,1])
-    print (xmax,ymax)
-    pixels_per_cm = xmax / box_width
-
-    # convert DLC coords to cm
-    locs_cm = locs_binned/pixels_per_cm
-    #print ("locs_cm: ", locs_cm.shape)
-
-    # partiiont the square box;  # it will be a square array
-    # it just holds the numbers 1..64 for rexample, for an 8 x 8 partition
-    partition = np.zeros((box_width//partition_size, 
-                          box_width//partition_size),
-                          )
-
-    # it contains matching of pop vectors to a specific bin (ranging from 1..64)
-    locs_partitioned = np.zeros(locs_cm.shape[0])
-
-    # list of 64 lists containing the population vector identities for each bin location
-    partition_times = []
-
-    ctrx = 0
-    bin_ctr = 0
-    for x in range(0,box_width,partition_size):
-        idx = np.where(np.logical_and(locs_cm[:,0]>=x,
-                                      locs_cm[:,0]<x+partition_size))[0]
-        ctry = 0
-        for y in range(0,box_width,partition_size):
-            idy = np.where(np.logical_and(locs_cm[:,1]>=y,
-                                          locs_cm[:,1]<y+partition_size))[0]
-
-            # find intersection of idx and idy as the times when the mouse was in 
-            #   partition bin: ctrx, ctry
-            idx3 = np.intersect1d(idx, idy)
-            #print (idx3)
-            locs_partitioned[idx3]=bin_ctr
-
-            partition_times.append(idx3)    
-
-            #
-            partition[ctry,ctrx]=bin_ctr
-
-            #
-            ctry+=1
-            bin_ctr+=1
-
-        ctrx+=1
-
-
-    print ("DONE")
-    
-    return f_binned, locs_partitioned, partition_times, partition, box_width, box_length, locs_cm,partition_size
 
     
     
@@ -309,6 +644,18 @@ class ProjectionDecoder(object):
     def transform_pca(self, X):
         X_pca = self.pca.transform(X)
         return X_pca
+    
+    #
+    def show_pca(self, X_pca, ani):
+        #
+        fig = plt.figure(figsize=(4,4))
+        plt.scatter(X_pca[:,0], X_pca[:,1], 
+                    c = ani.locs_partitioned, 
+                    cmap = ani.cmap, alpha=0.1,s=10)
+        plt.xlabel('PC 1')
+        plt.ylabel('PC 2')
+        plt.title(ani.animal_id + " " + ani.session_id+" # cells: "+str(ani.f_filtered.shape[1]), fontsize=10)
+
 
     def fit(self,X_train ,y_train, dimensionality):
 
@@ -436,7 +783,7 @@ class NaiveBayesRegression(object):
         tuning_all=np.zeros([num_nrns,input_xy.shape[0]]) #Matrix that stores tuning curves for all neurons
 
         #Loop through neurons and fit tuning curves
-        for j in trange(num_nrns): #Neuron number
+        for j in trange(num_nrns, desc='fitting cells'): #Neuron number
             try:
                 #print ("neuron number: ", j)
                 #print ("y_train: ", y_train)
@@ -468,7 +815,9 @@ class NaiveBayesRegression(object):
         # p_x=n_x/n
         # self.p_x=p_x
 
-    def predict(self,X_b_test,y_test):
+    def predict(self,
+                X_b_test,
+                y_test):
 
         """
         Predict outcomes using trained tuning curves
@@ -510,7 +859,7 @@ class NaiveBayesRegression(object):
         num_ts=X_b_test.shape[0] #Number of time steps we are predicting
 
         #Loop across time and decode
-        for t in trange(num_ts):
+        for t in trange(num_ts, desc='decoding mobile'):
             rs=X_b_test[t,:] #Number of spikes at this time point (in the interval we've specified including bins_before and bins_after)
 
             probs_total=np.ones([tuning_all[0,:].shape[0]]) #Vector that stores the probabilities of being in any state based on the neural activity (does not include probabilities of going from one state to the next)
@@ -746,3 +1095,51 @@ def predict_data(data_triaged_ave, X_test_data, dimensionality):
         neural_location[k] = idx1
 
     return neural_location
+
+
+#
+def prepare_data3(X, y, split=0.8):
+
+    len_rec = X.shape[0]
+    print ("length of moving period: ", len_rec/20., "sec")
+
+    idx = int(len_rec*split)
+
+    #
+    X_train = X[:idx]
+    X_test = X[idx:]
+    y_train = y[:idx]
+    y_test = y[idx:]
+
+    return X_train, y_train, X_test, y_test
+
+
+def get_active_frames(neural_data, min_activity = 1):
+
+    #print ("min spikes: ", min_spikes)
+    # Remove time bins with no neural activity
+    good_times=np.where(neural_data.sum(axis=1) >= min_activity)[0]
+
+    return good_times
+# def remove_zero_activity_frames(neural_data, labels):
+
+#     #print ("min spikes: ", min_spikes)
+#     # Remove time bins with no neural activity
+#     good_times=np.where(neural_data.sum(axis=1) > 0)[0]
+
+#     return neural_data[good_times], labels[good_times]
+#
+def find_active_times_and_cells(neural_data, min_spikes):
+
+    X=neural_data
+
+    #print ("min spikes: ", min_spikes)
+    # Remove time bins with no neural activity
+    good_times=np.where(X.sum(axis=1) > 0)[0]
+    print ("Frames with non-zero activity: ", good_times.shape[0]/20., " sec.")
+
+    # Find non-active neurons
+    good_cells = np.where(X.sum(axis=0)>=min_spikes)[0]
+    print ("# cells with some activity in the period: ", good_cells.shape)
+
+    return good_times, good_cells

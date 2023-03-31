@@ -6,10 +6,160 @@
   <component name="ChangeListManager">
     <list default="true" id="b815b19d-cc94-437c-97ff-ffc3f0372acd" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/binarization/Binarize_Suite2p_session_V2.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/binarization/Binarize_Suite2p_session_V2.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/treadmill_steffen/treadmill_session_ave_correlations.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/treadmill_steffen/treadmill_session_ave_correlations.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/calcium/calcium.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/calcium/calcium.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/treadmill/treadmill.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/treadmill/treadmill.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PCA/PCA_multi_sessions.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/PCA/PCA_single_session.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/analysis/Ca_burst_histograms.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/analysis/Eigenspectrum.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/analysis/Network_analysis.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/analysis/Process_movement.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/analysis/Variance_explained_AUC.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/binarization/Binarize_Inscopix.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/binarization/Binarize_Suite2p_animal_V2.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/binarization/Binarize_Suite2p_session_V2.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/binarization/Inscopix_convert_currated_matlab_to_npz.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/binarization/V1/Binarize_Suite2p_multi_sessions.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/binarization/V1/Binarize_Suite2p_single_session.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/correlation/Compute_pairwise_correlations_animal.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/correlation/Compute_pairwise_correlations_session.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/correlation/Visualize_correlations.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/correlation/old/Compute_pairwise_correlations_parallel_copy.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/decoding_mariona/mariona_2D_decoding_09112022.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/decoding_mariona/mariona_2D_decoding_PCA_plots.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/decoding_mariona/utils_nathalie.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/dlc_fix_tracks/dlc_fix_dark_tracks_jumping.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/dlc_fix_tracks/utils_dlc.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ephys/analysis/check_ephys_recording.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ephys/analysis/make_tetrode_geometry_for_yass.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ephys/analysis/old/testing_ttl_usb_fdt2xx_package.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ephys/analysis/visualize_kilosort_results.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ephys/analysis/visualize_yass_results.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ephys/hardware/OpenEphys_triggered_video_recording.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ephys/hardware/record_Basler_camera_triggered.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ephys/hardware/record_video.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ephys/make_tetrode_geometry_for_yass.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ephys/old/testing_ttl_usb_fdt2xx_package.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ephys/record_Basler_camera_triggered.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ephys/visualize_kilosort_results.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/graph/CeDa_network_graphs.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/intrinsic_dynamics_project/Save_Pday_in_each_directory_for_Rodrigo.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/intrinsic_dynamics_project/aucs_and_eigenspectrum.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/intrinsic_dynamics_project/compute_pca.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/intrinsic_dynamics_project/process_wheel_data.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/intrinsic_dynamics_project/recordings_summaries.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/intrinsic_dynamics_project/rsync_all_mice.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_donotouse/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_donotouse/.idea/inspectionProfiles/profiles_settings.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_donotouse/.idea/misc.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_donotouse/.idea/modules.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_donotouse/.idea/opexebo.iml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_donotouse/.idea/workspace.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_donotouse/old" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_donotouse/opexebo_1P_data.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_donotouse/opexebo_ephys_data.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_donotouse/opexebo_original.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_donotouse/utils.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/.idea/inspectionProfiles/profiles_settings.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/.idea/misc.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/.idea/modules.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/.idea/opexebo.iml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/.idea/workspace.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/old" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/angular_occupancy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/autocorrelation.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/border_coverage.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/border_score.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/egocentric_occupancy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/grid_score.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/place_field.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/population_vector_correlation.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/rate_map.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/rate_map_coherence.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/rate_map_stats.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/spatial_occupancy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/speed.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/speed_occupancy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/speed_score.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/theta_modulation_index.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/tuning_curve.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/analysis/tuning_curve_stats.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/defaults.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/errors.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/accumulate_spatial.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/bin_width_2_num.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/circular_mask.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/fit_ellipse.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/normxcorr2_general.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/peak_search.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/power_spectrum.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/shuffle.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/smooth.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/spatial_cross_correlation.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/upsample.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/validate_keyword.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/general/walk_filter.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_angularOccupancy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_autocorrelation.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_borderCoverage.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_borderScore.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_gridScore.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_placefield.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_rateMap.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_rateMapCoherence.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_rateMapStats.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_spatialOccupancy.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_speed.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_speedScore.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_turningCurve.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_analysis/test_turningCurveStats.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_general/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_general/test_accumulateSpatial.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_general/test_circular_mask.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_general/test_shuffle.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_general/test_smooth.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_general/test_spatialCrossCorrelation.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_general/test_upsample.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_general/test_validatekeyword.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_general/test_walkfilter.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo/tests/test_helpers.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo_1P_data_process.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo_1P_data_visualize.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo_ephys_data.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/opexebo_original.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/opexebo_place_field_analysis/utils.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/renan_tiff_process/mesc_merge.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/renan_tiff_process/utils.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/run_suite2p_colab_2021.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scicore/mesc_and_raw_binary_to_tiff.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scicore/scicore_copy_data_to_scicore.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scicore/scicore_copy_mesc_Zdrive_to_scicore.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scicore/scicore_run_scripts.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scicore/scicore_tests.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/treadmill_steffen/treadmill_PCA_and_graph_projection.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/treadmill_steffen/treadmill_session_ave_correlations.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/treadmill_steffen/utils_steffen.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/animal_database/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/animal_database/animal_database.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/calcium/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/calcium/calcium.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/cohort/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/cohort/cohort.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/dlc/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/dlc/dlc.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/network/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/network/network.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/treadmill/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/treadmill/treadmill.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/wheel/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/wheel/wheel.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/visualize_suite2p/load_suite2p_contours.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/volition/decode_stationary.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/volition/utils_nathalie.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -40,7 +190,7 @@
     &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;last_opened_file_path&quot;: &quot;/home/cat/code/donatolab&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.lookFeel&quot;
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
   }
 }</component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
