@@ -234,9 +234,11 @@ def compute_speed(locs_cm, time_frame = 0.05, smooth = True, frames_smooth = 30)
 
 
 def is_mobile_smooth(speed,
-                     threshold=5,
-                     window=20,
+                     threshold = 5,
+                     window = 21,  # this is the sampleing rate
                      order = 4):
+    
+    #
     from scipy.signal import savgol_filter
     speed = savgol_filter(speed, window, order)  # window size 13, polynomial order 5
 
@@ -249,11 +251,16 @@ def is_mobile_smooth(speed,
 
 
 def is_mobile(speed, threshold=5):
+
+    print ("TODO: merge all moving periods with < 1 sec break between")
+
     mobile = speed>threshold
     mobile = mobile.astype(int)
     idx_mob = np.where(mobile == 1)[0]
     idx_imm = np.where(mobile == 0)[0]
     return mobile, idx_mob, idx_imm
+
+
 
 def plot_results(y, y_pred, name=''):
     x = np.arange(len(y[:,0]))
@@ -691,6 +698,7 @@ def prepare_data3(X, y, split=0.8):
     y_train = y[:idx]
     y_test = y[idx:]
 
+    #
     return X_train, y_train, X_test, y_test
 
 
@@ -1013,7 +1021,7 @@ class Volition():
             "FS12"
         ]
 
-    def plot_grid(self, figsize=None):
+    def plot_grid(self, ax=None):
         
         #
         d = np.load(os.path.join(self.root_dir,
@@ -1021,34 +1029,26 @@ class Volition():
                                  self.session_id,
                                  'bayes_decoder_place_cells_False.npz'),
                     allow_pickle=True)
-
+        
         #
         partition = d['partition']
-        print(partition)
-
-        #
         par_size = d['partition_size']
-        print(par_size)
+
 
         #
-        if figsize is None:
-            fig = plt.figure()
-        else:
-            fig = plt.figure(figsize=figsize)
-
+        if ax is None:
+            ax = plt.subplots(111)
         #
         for k in range(partition.shape[0] + 1):
             # for p in range(partition.shape[1]):
-            plt.plot([0, 80], [k * par_size, k * par_size], c='black')
+            ax.plot([0, 80], [k * par_size, k * par_size], c='black')
 
         for k in range(partition.shape[1] + 1):
             # for p in range(partition.shape[1]):
-            plt.plot([k * par_size, k * par_size], [0, 80], c='black')
+            ax.plot([k * par_size, k * par_size], [0, 80], c='black')
 
         #
-        plt.show()
-
-        return fig
+        return ax
 
 
     def get_matches_forward(self):
@@ -1195,8 +1195,7 @@ class Volition():
             self.std=np.zeros(self.hist.shape[0])
         #return matches, match_times, hist, x, match_ids, dists_array, match_times_array
 
-
-
+    #
     def get_matches_forward_backward(self):
 
         # get datasets
@@ -1210,7 +1209,6 @@ class Volition():
             self.get_matches_forward()
         else:
             self.get_matches_backward()
-
 
     #
     def plot_decoder_errors(self):
@@ -1288,120 +1286,186 @@ class Volition():
             neck = np.float32(locs[3:, body_feature_idx:body_feature_idx + 2])
             np.save(fname_csv[:-4] + '_locs.npy', neck)
 
-
-
-    def animate_movement_open_field(self,frame):
-        #global ctr, fig, ax1, ax2, sizes2
-
-        return
+    #
+    def predict_bayes_data(self):
+        
+        '''  Function that takes in experiment data and then predicts the location
+             based on indexes
+        
+        '''
+        
+        #
+        start_idx = self.movie_start_idx
+        end_idx = self.movie_end_idx
 
         #
-        plt.suptitle("Time: "+str(round(ctr/sample_rate,2)).zfill(2))
+        self.make_bayes_datasets()
+
+        #
+        self.real_locs = self.locs_cm[start_idx:end_idx]
+        self.predicted_locs = self.model_nb.predict(self.neural_data[start_idx:end_idx],
+                                self.locs_cm[start_idx:end_idx])
+
+        #
+        print ("real locs: ", self.real_locs.shape)
+        print ("predicted locs: ", self.predicted_locs.shape)
+
+    #
+    def make_bayes_datasets(self):
+     
+        #
+        fname_csv = glob.glob(os.path.join(self.root_dir,
+                                                   self.animal_id,
+                                                   self.session_id,
+                                                   "*0.csv"))[0]
+        #
+        fname_locs = fname_csv[:-4] + '_locs.npy'
+
+        #
+        temp = os.path.join(self.root_dir,
+                            self.animal_id,
+                            self.session_id,
+                                '*binarized_traces*.npz')
+        #print ("temp: ", temp)
+        fname_bin = glob.glob(temp)[0]
+
+        # Get the data in bins
+        partition_size = 10
+
+        (f_binned,
+            locs_partitioned,
+            _,
+            _,
+            _,
+            _,
+            locs_cm,
+            partition_size,
+            ) = get_data_decoders_2D(fname_locs,
+                                     fname_bin,
+                                     partition_size=partition_size)
+
+        # trim longer results files [THIS SHOULD EVENTUALLY BE DONE PRE PROCESSING]
+        if f_binned.shape[0] < locs_partitioned.shape[0]:
+            #locs_partitioned = locs_partitioned[locs_partitioned.shape[0] - f_binned.shape[0]:]
+            locs_cm = locs_cm[locs_cm.shape[0] - f_binned.shape[0]:, :]
+
+        #
+        #print ("TODO: use start offset for mouse 7050: ")
+        fname_start = os.path.join(self.root_dir,
+                                    self.animal_id,
+                                    self.session_id,
+                                    'start.txt')
+        with open(fname_start) as f:
+            start = int(next(f))
+        print ("start offset: ", start)
+        # 
+        self.neural_data = np.int32(f_binned.copy()[start:])
+
+        #
+        self.locs_cm = np.int32(locs_cm.copy()[start:])
+
+    #
+    def animate_movement_open_field(self, i):
+        #global ctr #, fig, ax1, ax2, sizes2
+
+        #
+        #plt.suptitle("Time: "+str(round(ctr/sample_rate,2)).zfill(2))
 
         ########### TRACK SPACE #########
-        ax1.clear()
-        ax1=plt.subplot(1,2,1)
+        #ax1.clear()
+        #ax1=plt.subplot(1,2,1)
 
         #sizes = np.zeros(res.shape[0])+25
         #idx = pos_track[ctr]
         #idx = np.random.choice(np.arange(180),1)
         #sizes[idx]=250
         #ax1.imshow(partition)
-        draw_grid(ax1)
 
         x = locs_cm[ctr,0]/partition_size
         y = locs_cm[ctr,1]/partition_size
-        ax1.scatter(x,
-                    y,
-                    c='blue',
-                    s=200)
-        ax1.set_title("Mouse location x,y "+str(round(x*partition_size,1))+ " "+str(round(y*partition_size,1)) +
-                    " (cm)")
-
-        ax1.set_xlim(0,box_width//partition_size)
-        ax1.set_ylim(0,box_length//partition_size)
-
-        ax1.set_xticks([])
-        ax1.set_yticks([])
-
-        ############################################
-        ########### NEURAL STATE SPACE #############
-        ############################################
-        ax2.clear()
-        ax2=plt.subplot(1,2,2)
-        ax2.set_title("Neural state inferred location")
-        #sizes = np.zeros(G.number_of_nodes())+25
-
-        draw_grid(ax2)
-        temp = neural_location[ctr]
-        x = temp//(box_width//partition_size)+0.5
-        y = temp%(box_length//partition_size)+0.5
         
         #
-        ax2.scatter(x,
-                    y,
-                    c='red',
-                    s=200)
-        plt.xlim(0,box_width//partition_size)
-        plt.ylim(0,box_length//partition_size)
-
-        ax2.set_xticks([])
-        ax2.set_yticks([])
+        self.ax.scatter(self.predicted_locs[self.ctr,0],
+                        self.predicted_locs[self.ctr,1],
+                        c='blue',
+                        s=200)
         
-        if ctr%50==0:
-            print ("ctr: ", ctr)
+        self.ax.scatter(real_locs[self.ctr,0],
+                        real_locs[self.ctr,1],
+                        c='red',
+                        s=200)
+        #ax1.set_title("Mouse location x,y "+str(round(x*partition_size,1))+ " "+str(round(y*partition_size,1)) +
+        #            " (cm)")
+
+        #ax1.set_xlim(0,box_width//partition_size)
+        #ax1.set_ylim(0,box_length//partition_size)
+
+        self.ax.set_xticks([])
+        self.ax.set_yticks([])
 
         #
-        ctr+=1
+        self.ctr+=1
 
-        
+        return 
+
     #
     def make_movies(self):
 
         #
         from matplotlib import animation
 
+        #
+        def update_plot(i):
 
-        # get location of the mouse
-        self.locs_cm 
-        print ("locs_cm: ", self.locs_cm.shape)
+            
+            #
+            ax.set_title("frame: "+str(i)) 
 
-        # indexes of the immobile periods
-        self.idx_imobile_absolute #= #idx_imm[active_times_immobile],  # this is the relative times of the stationary times
-        print ("idx_imobile_absolute: ", self.idx_imobile_absolute.shape)
+            scat1.set_offsets([self.real_locs[i,0],
+                             self.real_locs[i,1]])
+            
+            #
+            scat2.set_offsets([self.predicted_locs[i,0],
+                             self.predicted_locs[i,1]])
 
-        # locations of predicted immobile periods
-        self.y_immobile_predicted 
-        print ("y_immobile_predicted: ", self.y_immobile_predicted.shape)
-        
-        # note used for now
-        # self.y_mobile_predicted,
-
-        # indexes of the mobile periods
-        self.idx_mob 
-        print ("idx_mob: ", self.idx_mob.shape)
-        self.idx_imm
-        print ("idx_imm: ", self.idx_imm.shape)
+            #
+            self.ctr+=1
 
         #
-        figsize=(6,6)
-        self.fig = self.plot_grid(figsize)
+        fig, ax = plt.subplots()        
+        self.ctr=0
 
-
-        ####                          
-        ani = animation.FuncAnimation(self.fig, 
-                                      self.animate_movement_open_field, 
-                                      #frames=neural_location.shape[0]-1
-                                      frames=50,
-                                      interval=1, 
-                                      repeat=True)
+        #
+        scat1 = plt.scatter(self.real_locs[0,0],
+                           self.real_locs[0,1],
+                           c='blue', s=100)
         
         #
-        fname = '/home/cat/test_vid.mp4'
-        ani.save(fname, 
+        scat2 = plt.scatter(self.predicted_locs[0,0],
+                            self.predicted_locs[0,1],
+                            c='orange',
+                            s=100)
+        
+        #
+        plt.xlim(0, 80)
+        plt.ylim(0, 80)
+
+        #
+        ax = self.plot_grid(ax)
+        
+        #
+        ani = animation.FuncAnimation(fig, 
+                                      update_plot, 
+                                      frames=np.arange(100),
+                                      #fargs=(scat1, scat2)
+
+                                      )
+        plt.show()
+
+
+        ani.save('/home/cat/test.avi', 
                 #writer='imagemagick', 
                 fps=20)
-        ani.close()
 
 
     # Iterate through all the sessions
@@ -1411,10 +1475,12 @@ class Volition():
         #
         for session_id in self.session_ids:
             
+            self.session_id = session_id
+
             #
             fname_out = os.path.join(self.root_dir,
                                      self.animal_id,
-                                     session_id,
+                                     self.session_id,
                                      "bayes_decoder_place_cells_"+str(self.use_place_cells_bayes)+'.npz')
             
             #
@@ -1472,8 +1538,10 @@ class Volition():
                 ids = []
                 for c in place_cells_dict:
                     ids.append(c['cell_id'])
+
                 #
                 place_cell_ids = np.hstack(ids)
+
                 #
                 if self.use_place_cells_bayes:
                     neural_data = neural_data[:,place_cell_ids]
@@ -1484,7 +1552,8 @@ class Volition():
                 # COMPUTE THE SPEED
                 # speed_threshold = 2 #Set a threshold for the speed
                 self.speed = compute_speed(locs_cm, smooth=True, frames_smooth=20)
-                mobile, idx_mob, idx_imm = is_mobile(self.speed, threshold=speed_threshold)
+                #mobile, idx_mob, idx_imm = is_mobile(self.speed, threshold=speed_threshold)
+                mobile, idx_mob, idx_imm = is_mobile_smooth(self.speed, threshold=speed_threshold)
 
                 #
                 x_mob = np.int32(neural_data[idx_mob])
@@ -1494,11 +1563,14 @@ class Volition():
                 #############################################
                 #############################################
                 #############################################
-                split = 0.9
+                split = self.split
                 print("total time, total cells: ", x_mob.shape)
-                X_train, y_train, X_mobile_test, y_mobile_test = prepare_data3(x_mob, y_mob, split)
+                X_train, y_train, X_mobile_test, y_mobile_test = prepare_data3(x_mob, 
+                                                                               y_mob, 
+                                                                               split)
+                #
                 active_times_mobile, active_cells = find_active_times_and_cells(X_train,
-                                                                         min_spikes=25)
+                                                                                min_spikes=25)
 
                 #
                 X_in = X_train[active_times_mobile][:, active_cells]
@@ -1511,15 +1583,15 @@ class Volition():
                 ###############################################
                 ############### TRAIN ON MOVING ###############
                 ###############################################
-                model_nb = NaiveBayesRegression(res=10)
-                model_nb.fit(X_in, y_in)
+                self.model_nb = NaiveBayesRegression(res=10)
+                self.model_nb.fit(X_in, y_in)
 
                 ###############################################
                 ############### PREDICT ON MOVING #############
                 ###############################################
                 # TODO: prediction fucntion should not get ground truth!
                 active_times_test = get_active_frames(X_mobile_test[:,active_cells])
-                y_mobile_predicted = model_nb.predict(X_mobile_test[active_times_test][:, active_cells],
+                y_mobile_predicted = self.model_nb.predict(X_mobile_test[active_times_test][:, active_cells],
                                                       y_mobile_test[active_times_test])
 
                 # Get the distance between the predicted value and the true value
@@ -1534,7 +1606,7 @@ class Volition():
                 active_times_immobile = get_active_frames(x_immobile)  # remove frames with no spikes
 
                 # predict
-                y_immobile_predicted = model_nb.predict(x_immobile[active_times_immobile][:, active_cells],
+                y_immobile_predicted = self.model_nb.predict(x_immobile[active_times_immobile][:, active_cells],
                                                         y_immobile_test[active_times_immobile]  # this is not necessary
                                                         )
                 
@@ -1581,7 +1653,7 @@ class Volition():
 
                     with open(fname_out[:-4]+'.pkl', 'wb') as outp:
                         #company1 = Company('banana', 40)
-                        pickle.dump(model_nb, outp, pickle.HIGHEST_PROTOCOL)
+                        pickle.dump(self.model_nb, outp, pickle.HIGHEST_PROTOCOL)
 
                 else:
                     print ("Skipping save for shuffle condition...")
@@ -1600,7 +1672,12 @@ class Volition():
                                      self.animal_id,
                                      self.session_id,
                                      "bayes_decoder_place_cells_"+str(self.use_place_cells_bayes)+'.npz')
-        
+
+
+        with open(fname_out[:-4]+'.pkl', 'rb') as outp:
+            self.model_nb = pickle.load(outp)
+
+       
         #
         d = np.load(fname_out, allow_pickle=True)
         

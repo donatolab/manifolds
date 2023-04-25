@@ -1444,12 +1444,29 @@ def plot_fields(cell,
 
     #
 def compute_all_place_fields_parallel(n_tests,
-                                      fname_traces,
-                                      fname_locs,
+                                      root_dir,
+                                      animal_id,
+                                      session_id,
                                       parallel=True,
                                       cell_ids=None,
                                       ):
 
+    fname_temp = os.path.join(root_dir,
+                              animal_id,
+                              session_id,
+                              '*locs.npy')
+    
+    #
+    fname_locs = glob.glob(fname_temp)[0]
+
+    #
+    fname_test= os.path.split(fname_locs)[0] + '/*binarized_traces*'
+    fname_traces = glob.glob(fname_test)[0]
+    if os.path.exists(fname_traces)==False:
+        print ("traces not found: ", fname_test)
+        return None
+    
+    
     #########################################################
     ########## ARENA AND OCCUPANCY MAP COMPUTATIONS #########
     #########################################################
