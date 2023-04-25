@@ -1476,6 +1476,8 @@ def compute_all_place_fields_parallel(n_tests,
 
     #
     fname_occ_map = os.path.join(os.path.split(fname_traces)[0], "occ_map.npy")
+
+    #
     occ_map.dump(fname_occ_map)
 
     #########################################################
@@ -1949,6 +1951,7 @@ def find_placefields(root_dir, animal_id, ax=None, label=''):
     plt.xlabel("FS Day")
     plt.legend()
 
+#
 def return_cells(root_dir, animal_id, session_id):
     #
     # fname_locs = ('/media/cat/4TB/donato/nathalie/DON-007050/FS9/DON-007050_20211030_TR-BSL_FS9-ACQDLC_resnet50_open_arena_white_floorSep8shuffle1_200000_locs.npy')
@@ -1956,16 +1959,47 @@ def return_cells(root_dir, animal_id, session_id):
                               animal_id,
                               session_id,
                               '*locs.npy')
+    
+    #
     fname_locs = glob.glob(fname_temp)[0]
+    #print ("fname_locs: ", os.path.split(fname_locs)[0])
 
     #
-    fname_traces = os.path.split(fname_locs)[0] + '/binarized_traces.npz'
-
+    fname_test= os.path.split(fname_locs)[0] + '/*binarized_traces*'
+    fname_traces = glob.glob(fname_test)[0]
+    if os.path.exists(fname_traces)==False:
+        print ("traces not found: ", fname_test)
+        return None
     #
     root_dir = os.path.join(os.path.split(fname_traces)[0],
                             'cell_analysis')
+    
     #
-    occ_map = np.load(os.path.split(root_dir)[0] + '/occ_map.npy', allow_pickle=True)
+    fname_occ_map = os.path.split(root_dir)[0] + '/occ_map.npy'
+    if os.path.exists(fname_occ_map):
+        occ_map = np.load(fname_occ_map, allow_pickle=True)
+    else:
+
+        #arena_x = [300, 1550]
+        #arena_y = [175, 1400]
+        arena_size = [80, 80]
+        #arena_shape = 'square'
+        bin_width = 2.5
+
+        #
+        locs, _, times, _ = load_locs_traces_running(fname_locs,
+                                                    fname_traces,
+                                                    arena_size)
+
+        # compute spatial occpuancy map; only requires the locatoins and
+        occ_map, _, _ = op.analysis.spatial_occupancy(times,
+                                                    locs.T,
+                                                    arena_size,
+                                                    bin_width=bin_width)
+
+        #
+        occ_map.dump(fname_occ_map)
+
 
     #
     cell_id = 0

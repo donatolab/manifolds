@@ -175,7 +175,9 @@ def get_data_decoders_2D(fname_locs,
 def get_neural_data_and_locs(root_dir,
                              animal_id,
                              session_id):
-    from utils_nathalie import get_data_decoders_2D
+    
+    #
+    from utils import get_data_decoders_2D
 
     fname_csv = os.path.join(root_dir,
                              animal_id,
@@ -1011,8 +1013,8 @@ class Volition():
             "FS12"
         ]
 
-    def plot_grid(self):
-
+    def plot_grid(self, figsize=None):
+        
         #
         d = np.load(os.path.join(self.root_dir,
                                  self.animal_id,
@@ -1029,7 +1031,10 @@ class Volition():
         print(par_size)
 
         #
-        plt.figure()
+        if figsize is None:
+            fig = plt.figure()
+        else:
+            fig = plt.figure(figsize=figsize)
 
         #
         for k in range(partition.shape[0] + 1):
@@ -1042,6 +1047,8 @@ class Volition():
 
         #
         plt.show()
+
+        return fig
 
 
     def get_matches_forward(self):
@@ -1191,6 +1198,7 @@ class Volition():
 
 
     def get_matches_forward_backward(self):
+
         # get datasets
         self.imm_pred, self.imm_true, self.idx_imm_abs, self.locs_cm = get_prediction_data(self.root_dir,
                                                                        self.animal_id,
@@ -1282,16 +1290,134 @@ class Volition():
 
 
 
+    def animate_movement_open_field(self,frame):
+        #global ctr, fig, ax1, ax2, sizes2
+
+        return
+
+        #
+        plt.suptitle("Time: "+str(round(ctr/sample_rate,2)).zfill(2))
+
+        ########### TRACK SPACE #########
+        ax1.clear()
+        ax1=plt.subplot(1,2,1)
+
+        #sizes = np.zeros(res.shape[0])+25
+        #idx = pos_track[ctr]
+        #idx = np.random.choice(np.arange(180),1)
+        #sizes[idx]=250
+        #ax1.imshow(partition)
+        draw_grid(ax1)
+
+        x = locs_cm[ctr,0]/partition_size
+        y = locs_cm[ctr,1]/partition_size
+        ax1.scatter(x,
+                    y,
+                    c='blue',
+                    s=200)
+        ax1.set_title("Mouse location x,y "+str(round(x*partition_size,1))+ " "+str(round(y*partition_size,1)) +
+                    " (cm)")
+
+        ax1.set_xlim(0,box_width//partition_size)
+        ax1.set_ylim(0,box_length//partition_size)
+
+        ax1.set_xticks([])
+        ax1.set_yticks([])
+
+        ############################################
+        ########### NEURAL STATE SPACE #############
+        ############################################
+        ax2.clear()
+        ax2=plt.subplot(1,2,2)
+        ax2.set_title("Neural state inferred location")
+        #sizes = np.zeros(G.number_of_nodes())+25
+
+        draw_grid(ax2)
+        temp = neural_location[ctr]
+        x = temp//(box_width//partition_size)+0.5
+        y = temp%(box_length//partition_size)+0.5
+        
+        #
+        ax2.scatter(x,
+                    y,
+                    c='red',
+                    s=200)
+        plt.xlim(0,box_width//partition_size)
+        plt.ylim(0,box_length//partition_size)
+
+        ax2.set_xticks([])
+        ax2.set_yticks([])
+        
+        if ctr%50==0:
+            print ("ctr: ", ctr)
+
+        #
+        ctr+=1
+
+        
+    #
+    def make_movies(self):
+
+        #
+        from matplotlib import animation
+
+
+        # get location of the mouse
+        self.locs_cm 
+        print ("locs_cm: ", self.locs_cm.shape)
+
+        # indexes of the immobile periods
+        self.idx_imobile_absolute #= #idx_imm[active_times_immobile],  # this is the relative times of the stationary times
+        print ("idx_imobile_absolute: ", self.idx_imobile_absolute.shape)
+
+        # locations of predicted immobile periods
+        self.y_immobile_predicted 
+        print ("y_immobile_predicted: ", self.y_immobile_predicted.shape)
+        
+        # note used for now
+        # self.y_mobile_predicted,
+
+        # indexes of the mobile periods
+        self.idx_mob 
+        print ("idx_mob: ", self.idx_mob.shape)
+        self.idx_imm
+        print ("idx_imm: ", self.idx_imm.shape)
+
+        #
+        figsize=(6,6)
+        self.fig = self.plot_grid(figsize)
+
+
+        ####                          
+        ani = animation.FuncAnimation(self.fig, 
+                                      self.animate_movement_open_field, 
+                                      #frames=neural_location.shape[0]-1
+                                      frames=50,
+                                      interval=1, 
+                                      repeat=True)
+        
+        #
+        fname = '/home/cat/test_vid.mp4'
+        ani.save(fname, 
+                #writer='imagemagick', 
+                fps=20)
+        ani.close()
+
+
     # Iterate through all the sessions
     def train_bayes(self,
                     speed_threshold=2):
+        
         #
-
         for session_id in self.session_ids:
+            
+            #
             fname_out = os.path.join(self.root_dir,
                                      self.animal_id,
                                      session_id,
                                      "bayes_decoder_place_cells_"+str(self.use_place_cells_bayes)+'.npz')
+            
+            #
             if os.path.exists(fname_out) == False or self.overwrite_bayes == True:
 
                 fname_csv = glob.glob(os.path.join(self.root_dir,
@@ -1383,11 +1509,14 @@ class Volition():
                     y_in = np.roll(y_in, active_times_mobile.shape[0]//2,axis=0)
 
                 ###############################################
-                ########### TRAIN AND PREDICT MOVING ##########
+                ############### TRAIN ON MOVING ###############
                 ###############################################
                 model_nb = NaiveBayesRegression(res=10)
                 model_nb.fit(X_in, y_in)
 
+                ###############################################
+                ############### PREDICT ON MOVING #############
+                ###############################################
                 # TODO: prediction fucntion should not get ground truth!
                 active_times_test = get_active_frames(X_mobile_test[:,active_cells])
                 y_mobile_predicted = model_nb.predict(X_mobile_test[active_times_test][:, active_cells],
@@ -1398,15 +1527,18 @@ class Volition():
                                                      y_mobile_predicted)
 
                 ###############################################
-                ############# PREDICT IMMOBILE ###############
+                ############# PREDICT ON IMMOBILE #############
                 ###############################################
-                x_immobile = np.int32(neural_data[idx_imm])
-                y_immobile_test = locs_cm[idx_imm]
-                active_times_immobile = get_active_frames(x_immobile)
+                x_immobile = np.int32(neural_data[idx_imm])  # neural data
+                y_immobile_test = locs_cm[idx_imm]           # location data
+                active_times_immobile = get_active_frames(x_immobile)  # remove frames with no spikes
 
-                #
+                # predict
                 y_immobile_predicted = model_nb.predict(x_immobile[active_times_immobile][:, active_cells],
-                                                        y_immobile_test)
+                                                        y_immobile_test[active_times_immobile]  # this is not necessary
+                                                        )
+                
+                # compute error
                 distance_error_immobile = get_distance(y_immobile_test[active_times_immobile],
                                                        y_immobile_predicted)
 
@@ -1417,7 +1549,13 @@ class Volition():
                     np.savez(fname_out,
                              distance_error_mobile = distance_error_mobile,
                              distance_error_immobile = distance_error_immobile,
-                             idx_imobile_absolute = idx_imm[active_times_immobile],  # this is the relative times of the stationary times
+                             
+                             # this is the relative times of the stationary times
+                             # so indexes into all data to finde immobile periods: idx_imm
+                             #               then searches the active frames: active_times_immobile
+                             idx_imobile_active_absolute = idx_imm[active_times_immobile],  
+
+                            #
                              locs_cm = locs_cm,
                              neural_data = neural_data,
 
@@ -1449,7 +1587,47 @@ class Volition():
                     print ("Skipping save for shuffle condition...")
                 print ('')
 
+            #
+            else:
 
+                self.load_bayes()
+
+
+    def load_bayes(self):
+        
+        #
+        fname_out = os.path.join(self.root_dir,
+                                     self.animal_id,
+                                     self.session_id,
+                                     "bayes_decoder_place_cells_"+str(self.use_place_cells_bayes)+'.npz')
+        
+        #
+        d = np.load(fname_out, allow_pickle=True)
+        
+        #
+        self.distance_error_mobile = d['distance_error_mobile']
+        self.distance_error_immobile = d['distance_error_immobile']
+        self.idx_imobile_active_absolute = d['idx_imobile_active_absolute']
+        self.locs_cm = d['locs_cm']
+        self.neural_data = d['neural_data']
+        self.place_cell_ids = d['place_cell_ids']
+        self.all_cell_ids = d['all_cell_ids']
+        self.neural_data_shape = d['neural_data_shape']
+        self.y_immobile_predicted = d['y_immobile_predicted']
+        self.y_mobile_predicted = d['y_mobile_predicted']
+        self.active_cells = d['active_cells']
+        self.active_times_mobile = d['active_times_mobile']
+        self.active_times_test = d['active_times_test']
+        self.idx_mob = d['idx_mob']
+        self.idx_imm = d['idx_imm']
+        self.speed = d['speed']
+        self.split = d['split']
+        self.partition = d['partition']
+        self.partition_times = d['partition_times']
+        self.partition_size = d['partition_size']
+        self.locs_partitioned = d['locs_partitioned']
+
+    #
     def get_bouts(self, idx_imm):
         # detect bouts:
         imms = []
@@ -1584,6 +1762,8 @@ def get_prediction_data(root_dir,
                         session_id,
                         mobile
                         ):
+    
+    #
     data = np.load(os.path.join(root_dir,
                                 animal_id,
                                 session_id,
