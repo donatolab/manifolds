@@ -23,6 +23,11 @@ from scipy.stats import norm
 from scipy.spatial.distance import cdist
 import numpy as np
 
+import sys
+sys.path.insert(0, '..')
+
+from utils.decode import decode
+
 
 ################################################# 
 ################################################# 
@@ -52,6 +57,8 @@ class Animal():
                             self.session_id,
                             "results")
         
+        #
+        self.bayesian_decoding = decode.bayesian_decoding
 
         # make output directory
         try:
@@ -191,173 +198,7 @@ class Animal():
         print ("DONE")
         #return f_binned, locs_partitioned, partition_times, partition, box_width, box_length, locs_cm,partition_size
 
-    #
-    def bayesian_decoding(self):
-        
-        #
-        fname_out = os.path.join(self.root_dir,
-                            self.session_id,
-                            "bayes_decoder_place_cells_"+str(self.use_place_cells)+'.npz')
-
-
-        # trim longer results files [THIS SHOULD EVENTUALLY BE DONE PRE PROCESSING]
-        if self.f_binned.shape[0] < self.locs_partitioned.shape[0]:
-            #locs_partitioned = locs_partitioned[locs_partitioned.shape[0] - f_binned.shape[0]:]
-            self.locs_cm = self.locs_cm[self.locs_cm.shape[0] - self.f_binned.shape[0]:, :]
-
-        #
-        #############################################
-        if self.use_place_cells:
-            place_cells_dict = np.load(os.path.join(os.path.split(self.fname_locs)[0], 'place_cells.npy'), allow_pickle=True)
-            ids = []
-            for c in place_cells_dict:
-                ids.append(c['cell_id'])
-            #
-            place_cell_ids = np.hstack(ids)
-            #
-            self.neural_data_local = self.neural_data[:,place_cell_ids].copy()
-        else:
-            place_cell_ids = None
-            self.neural_data_local = self.neural_data.copy()
-
-        #############################################
-        #############################################
-        #############################################
-        # COMPUTE THE SPEED
-        # speed_threshold = 2 #Set a threshold for the speed
-        self.compute_speed()
-
-        #
-        x_mob = np.int32(self.neural_data_local[self.idx_mob])
-        y_mob = self.locs_cm[self.idx_mob]
-        print("Time moving: ", self.idx_mob.shape[0] / 20., 
-              ", time not moving: ", self.idx_imm.shape[0] / 20.)
-
-        #############################################
-        #############################################
-        #############################################
-        print("total time, total cells: ", x_mob.shape)
-        X_train, y_train, X_mobile_test, y_mobile_test = prepare_data3(x_mob, y_mob, 
-                                                                       self.data_split)
-        active_times_mobile, active_cells = find_active_times_and_cells(X_train,
-                                                                        min_spikes=25)
-
-
-
-        #
-        X_in = X_train[active_times_mobile][:, active_cells]
-        y_in = y_train[active_times_mobile]
-        self.y_train = y_in
-        
-        #
-        if self.shuffle:
-            y_in = np.roll(y_in, active_times_mobile.shape[0]//2,axis=0)
-
-        ##################################
-        ########### TRAIN MODEL ##########
-        ##################################
-        model_nb = NaiveBayesRegression(res=10)
-        model_nb.fit(X_in, y_in)
-
-        ########################################
-        ############ TEST MOBILE DATA ##########
-        ########################################
-        # TODO: prediction fucntion should not get ground truth!
-        active_times_test = get_active_frames(X_mobile_test[:,active_cells])
-        y_mobile_test = y_mobile_test[active_times_test]
-        X_mobile_test = X_mobile_test[active_times_test][:,active_cells]
-
-        # check if the test data is within 3 cm of the training data
-        if self.remove_nonvisited_locs:
-            idx_remove = []
-            for k in range(y_mobile_test.shape[0]):
-                loc = y_mobile_test[k]
-                dist = np.linalg.norm(loc-self.y_train,axis=1)
-                cl = np.min(dist)
-                if cl>3:
-                    print ("test removed from training set because too far ", cl , " cm")
-                    idx_remove.append(k)
-
-            # remove the bad indices
-            y_mobile_test = np.delete(y_mobile_test, idx_remove, axis=0)
-            X_mobile_test = np.delete(X_mobile_test, idx_remove, axis=0)
-
-        y_mobile_predicted = model_nb.predict(X_mobile_test,
-                                              y_mobile_test)
-
-        # Get the distance between the predicted value and the true value
-        distance_error_mobile = get_distance(y_mobile_test,
-                                             y_mobile_predicted)
-
-        ###############################################
-        ############# PREDICT IMMOBILE ###############
-        ###############################################
-        if self.predict_immobile:
-            x_immobile = np.int32(self.neural_data_local[self.idx_imm])
-            y_immobile_test = self.locs_cm[self.idx_imm]
-            active_times_immobile = get_active_frames(x_immobile)
-
-            #
-            y_immobile_predicted = model_nb.predict(x_immobile[active_times_immobile][:, active_cells],
-                                                    y_immobile_test)
-            distance_error_immobile = get_distance(y_immobile_test[active_times_immobile],
-                                                    y_immobile_predicted)
-        else:
-            distance_error_immobile = np.nan
-            y_immobile_predicted = np.nan
-            active_times_immobile = []
-
-        if self.plot_bayesian_decoding:
-            fig = plt.figure()
-            ax = sns.violinplot(data = distance_error_mobile, 
-                                showfliers=True,
-                                #showmeans=True,
-                                showmedians=True,)
-            plt.ylabel("Distance error (cm)")
-            plt.xlabel("Session")
-            plt.show()
-
-        ###############################################
-        ###############################################
-        ###############################################
-        self.distance_error_mobile = distance_error_mobile
-        self.distance_error_immobile = distance_error_immobile
-
-        if self.shuffle==False:
-            np.savez(fname_out,
-                        distance_error_mobile = distance_error_mobile,
-                        distance_error_immobile = distance_error_immobile,
-                        idx_imobile_absolute = self.idx_imm[active_times_immobile],  # this is the relative times of the stationary times
-                        locs_cm = self.locs_cm,
-                        neural_data = self.neural_data,
-
-                        #
-                        place_cell_ids = place_cell_ids,
-                        all_cell_ids = np.arange(self.neural_data.shape[1]),
-                        neural_data_shape = self.neural_data.shape,
-                        y_immobile_predicted = y_immobile_predicted,
-                        y_mobile_predicted = y_mobile_predicted,
-                        active_cells = active_cells,
-                        active_times_mobile = active_times_mobile,
-                        active_times_test = active_times_test,
-                        idx_mob = self.idx_mob,
-                        idx_imm = self.idx_imm,
-                        speed = self.speed_threshold,
-                        split = self.data_split,
-
-                        #
-                        partition = self.partition,
-                        partition_times = self.partition_times,
-                        partition_size = self.partition_size,
-                        locs_partitioned = self.locs_partitioned)
-
-            with open(fname_out[:-4]+'.pkl', 'wb') as outp:
-                #company1 = Company('banana', 40)
-                pickle.dump(model_nb, outp, pickle.HIGHEST_PROTOCOL)
-
-        else:
-            print ("Skipping save for shuffle condition...")
-        print ('')
+    
     
 
     #
@@ -396,18 +237,6 @@ class Animal():
             locs_cm = locs_cm[locs_cm.shape[0]-f_binned.shape[0]:,:]
         
         f_filtered = f_binned
-
-
-
-
-
-
-
-
-
-
-
-
 
 #
 def get_place_cell_ids(fname_in):

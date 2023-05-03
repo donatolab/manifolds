@@ -25,6 +25,12 @@ from scipy.stats import norm
 from scipy.spatial.distance import cdist
 import numpy as np
 
+import sys
+sys.path.insert(0, '..')
+
+from utils.decode import decode
+
+
 def preprocess_data2D(root_dir, session, fname_neural, fname_locs):
     raw_data = np.array(pd.read_csv(os.path.join(root_dir,session, fname_neural)))
     raw_data =  raw_data[:,1:-25]
@@ -177,7 +183,7 @@ def get_neural_data_and_locs(root_dir,
                              session_id):
     
     #
-    from utils import get_data_decoders_2D
+    from donlabtools.volition.utils_local import get_data_decoders_2D
 
     fname_csv = os.path.join(root_dir,
                              animal_id,
@@ -191,6 +197,7 @@ def get_neural_data_and_locs(root_dir,
                         animal_id,
                         session_id,
                         '*binarized_traces*.npz')
+    
     # print ("temp: ", temp)
     fname_bin = glob.glob(temp)[0]
 
@@ -618,10 +625,6 @@ def get_cmap_2d():
             else:
                 colorlist.append(((float(32 * i / 255), float((255 - 32 * j) / 255), float(32 * j / 255))))
 
-    if False:
-        fig = plt.figure(figsize=(4, 4))
-        plt.scatter(xlist, ylist, c=colorlist, edgecolor='none', s=1000, marker='s')
-        plt.show()
 
     cmap = plt.get_cmap('autumn_r')
     cmaplist = [cmap(i) for i in range(cmap.N)]
@@ -1003,9 +1006,14 @@ def predict_bayes_stationary(root_dir,
 class Volition():
 
     def __init__(self, root_dir, animal_id):
+
+        #
         self.root_dir = root_dir
+        
+        #
         self.animal_id = animal_id
 
+        #
         self.session_ids = [
             "FS1",
             "FS2",
@@ -1020,6 +1028,195 @@ class Volition():
             "FS11",
             "FS12"
         ]
+
+        self.partition_size = 10
+
+
+        #
+        self.bayesian_decoding = decode.bayesian_decoding
+
+    #
+    def load_data(self):
+
+        # make output directory
+        #print (os.path.join(self.root_dir,
+        #                    self.animal_id,
+        #                            self.session_id,
+        #                        "*0.csv"))
+        self.fname_csv = glob.glob(os.path.join(self.root_dir,
+                                                self.animal_id,
+                                    self.session_id,
+                                    "*0.csv"))[0]
+        self.fname_locs = self.fname_csv[:-4]+'_locs.npy'
+        self.fname_bin = glob.glob(os.path.join(self.root_dir,
+                                                self.animal_id,
+                                    self.session_id,
+                                    '*binarized_traces*'))[0]
+        self.fname_start = os.path.join(self.root_dir,
+                                        self.animal_id,
+                                    self.session_id,
+                                    'start.txt')
+        
+
+        # process location csv
+        self.process_location_csv()
+
+        # process neural data
+        self.get_data_decoders_2D()
+
+        #from utils_nathalie import get_cmap_2d
+        self.cmap = get_cmap_2d()
+
+
+
+    def get_data_decoders_2D(self):
+        
+        print ("...processing neural data...")
+
+        F_upphase, locs = load_tracks_2D(self.fname_locs,
+                                         self.fname_bin)
+            #print ("locs: ", locs.shape)
+        # partition space into specific parcels
+        F_upphase = F_upphase.T
+        F_upphase = F_upphase[0:36000]
+        #print ("F: ", F_upphase.shape)
+
+        # bin data
+        bin_size = 7
+        run_binnflag = False
+        if run_binnflag:
+            sum_flag = True
+            f_binned= run_binning(F_upphase, bin_size, sum_flag)
+        else:
+            f_binned = F_upphase
+        print (f_binned.shape)
+
+        # 
+        if run_binnflag:
+            sum_flag = False
+            locs_binned = run_binning(locs, bin_size, sum_flag)
+        else:
+            locs_binned = locs
+        #print ("locs_binned: ", locs_binned.shape)
+
+
+        # partition space 
+        box_width, box_length = 80, 80    # length in centimeters
+
+        # centre to 0,0
+        locs[:,0] = locs[:,0]-np.min(locs[:,0])
+        locs[:,1] = locs[:,1]-np.min(locs[:,1])
+
+        xmax = np.max(locs[:,0])
+        ymax = np.max(locs[:,1])
+        print (xmax,ymax)
+        pixels_per_cm = xmax / box_width
+
+        # convert DLC coords to cm
+        locs_cm = locs_binned/pixels_per_cm
+        #print ("locs_cm: ", locs_cm.shape)
+
+        # partiiont the square box;  # it will be a square array
+        # it just holds the numbers 1..64 for rexample, for an 8 x 8 partition
+        partition = np.zeros((box_width//self.partition_size, 
+                            box_width//self.partition_size),
+                            )
+
+        # it contains matching of pop vectors to a specific bin (ranging from 1..64)
+        locs_partitioned = np.zeros(locs_cm.shape[0])
+
+        # list of 64 lists containing the population vector identities for each bin location
+        partition_times = []
+
+        ctrx = 0
+        bin_ctr = 0
+        for x in range(0,box_width,self.partition_size):
+            idx = np.where(np.logical_and(locs_cm[:,0]>=x,
+                                        locs_cm[:,0]<x+self.partition_size))[0]
+            ctry = 0
+            for y in range(0,box_width,self.partition_size):
+                idy = np.where(np.logical_and(locs_cm[:,1]>=y,
+                                            locs_cm[:,1]<y+self.partition_size))[0]
+
+                # find intersection of idx and idy as the times when the mouse was in 
+                #   partition bin: ctrx, ctry
+                idx3 = np.intersect1d(idx, idy)
+                #print (idx3)
+                locs_partitioned[idx3]=bin_ctr
+
+                partition_times.append(idx3)    
+
+                #
+                partition[ctry,ctrx]=bin_ctr
+
+                #
+                ctry+=1
+                bin_ctr+=1
+
+            ctrx+=1
+
+        self.f_binned = self.f_filtered = self.neural_data = f_binned
+        self.locs_partitioned = locs_partitioned
+        self.partition_times = partition_times
+        self.partition = partition
+        self.box_width = box_width
+        self.box_length = box_length
+        self.locs_cm = locs_cm
+        #self.partition_size = partition_size
+
+
+        print ("DONE")
+        #return f_binned, locs_partitioned, partition_times, partition, box_width, box_length, locs_cm,partition_size
+
+
+    def compute_speed(self, smooth=True, frames_smooth=20):
+
+        # compute speed 
+        speed = compute_speed(self.locs_cm, smooth=True, frames_smooth=20)
+
+        self.mobile, self.idx_mob, self.idx_imm = is_mobile(speed, threshold=self.speed_threshold)
+        
+
+    #
+    def process_location_csv(self):
+        print ("... processing location csv")
+        fname_csv = glob.glob(os.path.join(self.root_dir,
+                                           self.animal_id,
+                                    self.session_id,
+                                    "*0.csv"))[0]
+        # 
+        locs = load_csv(fname_csv)
+        body_feature_idx = 5*3+1
+        neck = np.float32(locs[3:,body_feature_idx:body_feature_idx+2])
+        np.save(fname_csv[:-4]+'_locs.npy', neck)
+    
+
+    #
+    def process_neural_data(self):
+
+
+        #Get the data in bins
+        (f_binned,
+            locs_partitioned,
+            partition_times,
+            partition,
+            box_width,
+            box_length,
+            locs_cm,
+            partition_size,
+            ) = get_data_decoders_2D(self.fname_locs,
+                                     self.fname_bin, 
+                                     partition_size=self.partition_size,)
+
+        # clip data to the same lengths
+        if f_binned.shape[0] < locs_partitioned.shape[0]:
+            locs_partitioned = locs_partitioned[locs_partitioned.shape[0]-f_binned.shape[0]:]
+            locs_cm = locs_cm[locs_cm.shape[0]-f_binned.shape[0]:,:]
+        
+        f_filtered = f_binned
+
+
+
 
     def plot_grid(self, ax=None):
         
@@ -1275,16 +1472,34 @@ class Volition():
                                                "*0.csv"))[0]
 
             fname_out = self.fname_csv[:-4] + "_locs.npy"
-            if os.path.exists(fname_out):
-                continue
+            #if os.path.exists(fname_out):
+            #    continue
 
             #
-            locs = load_csv(fname_csv)
+            locs = load_csv(self.fname_csv)
             body_feature_idx = 5 * 3 + 1
 
             # print ("Body feature index", np.arange(body_feature_idx,body_feature_idx+2,1))
             neck = np.float32(locs[3:, body_feature_idx:body_feature_idx + 2])
-            np.save(fname_csv[:-4] + '_locs.npy', neck)
+            np.save(self.fname_csv[:-4] + '_locs.npy', neck)
+
+            #
+            spines = []
+            spines.append(neck)
+            idxs = [0, 1,5,6,7,8,11]
+            for k in idxs:
+                body_feature_idx = k * 3 + 1
+                temp = np.float32(locs[3:, body_feature_idx:body_feature_idx + 2])
+                spines.append(temp)
+
+            #
+            spines = np.array(spines)
+            print ("spines.shape: ", spines.shape)
+
+            #
+            np.save(self.fname_csv[:-4] + '_spines.npy', spines)
+
+
 
     #
     def predict_bayes_data(self):
@@ -1295,16 +1510,30 @@ class Volition():
         '''
         
         #
-        start_idx = self.movie_start_idx
-        end_idx = self.movie_end_idx
+        #start_idx = self.movie_start_idx
+        #if self.movie_end_idx is None:
+        #end_idx = self.movie_end_idx
 
         #
         self.make_bayes_datasets()
 
         #
-        self.real_locs = self.locs_cm[start_idx:end_idx]
-        self.predicted_locs = self.model_nb.predict(self.neural_data[start_idx:end_idx],
-                                self.locs_cm[start_idx:end_idx])
+        print ("self.locs_cm.shape: ", self.locs_cm.shape)
+        print ("self.neural_data.shape: ", self.neural_data.shape)
+
+        #
+        self.real_locs = self.locs_cm[self.movie_idxs]
+
+        # before prediction, must select only the active cells that were used for training
+        self.neural_data = self.neural_data[:, self.active_cells]
+
+
+        #
+        self.predicted_locs = self.model_nb.predict(
+                                    #self.neural_data[start_idx:end_idx+300],
+                                    #self.locs_cm[start_idx:end_idx+300])
+                                    self.neural_data[self.movie_idxs],
+                                    self.real_locs)
 
         #
         print ("real locs: ", self.real_locs.shape)
@@ -1326,7 +1555,8 @@ class Volition():
                             self.animal_id,
                             self.session_id,
                                 '*binarized_traces*.npz')
-        #print ("temp: ", temp)
+        
+        # 
         fname_bin = glob.glob(temp)[0]
 
         # Get the data in bins
@@ -1351,13 +1581,18 @@ class Volition():
 
         #
         #print ("TODO: use start offset for mouse 7050: ")
-        fname_start = os.path.join(self.root_dir,
-                                    self.animal_id,
-                                    self.session_id,
-                                    'start.txt')
-        with open(fname_start) as f:
-            start = int(next(f))
+        try:
+            fname_start = os.path.join(self.root_dir,
+                                        self.animal_id,
+                                        self.session_id,
+                                        'start.txt')
+            with open(fname_start) as f:
+                start = int(next(f))
+        except:
+            start = 0
+            
         print ("start offset: ", start)
+
         # 
         self.neural_data = np.int32(f_binned.copy()[start:])
 
@@ -1365,108 +1600,300 @@ class Volition():
         self.locs_cm = np.int32(locs_cm.copy()[start:])
 
     #
-    def animate_movement_open_field(self, i):
-        #global ctr #, fig, ax1, ax2, sizes2
-
-        #
-        #plt.suptitle("Time: "+str(round(ctr/sample_rate,2)).zfill(2))
-
-        ########### TRACK SPACE #########
-        #ax1.clear()
-        #ax1=plt.subplot(1,2,1)
-
-        #sizes = np.zeros(res.shape[0])+25
-        #idx = pos_track[ctr]
-        #idx = np.random.choice(np.arange(180),1)
-        #sizes[idx]=250
-        #ax1.imshow(partition)
-
-        x = locs_cm[ctr,0]/partition_size
-        y = locs_cm[ctr,1]/partition_size
-        
-        #
-        self.ax.scatter(self.predicted_locs[self.ctr,0],
-                        self.predicted_locs[self.ctr,1],
-                        c='blue',
-                        s=200)
-        
-        self.ax.scatter(real_locs[self.ctr,0],
-                        real_locs[self.ctr,1],
-                        c='red',
-                        s=200)
-        #ax1.set_title("Mouse location x,y "+str(round(x*partition_size,1))+ " "+str(round(y*partition_size,1)) +
-        #            " (cm)")
-
-        #ax1.set_xlim(0,box_width//partition_size)
-        #ax1.set_ylim(0,box_length//partition_size)
-
-        self.ax.set_xticks([])
-        self.ax.set_yticks([])
-
-        #
-        self.ctr+=1
-
-        return 
-
-    #
     def make_movies(self):
 
         #
         from matplotlib import animation
+        from progress.bar import Bar
+
+        start = self.movie_start_idx
+        end = self.movie_end_idx
+        
+        #
+        fname_csv = glob.glob(os.path.join(self.root_dir,
+                                            self.animal_id,
+                                            self.session_id,
+                                            "*0.csv"))[0]
+        
+        #
+        fname_spines = fname_csv[:-4] + '_spines.npy'
+
+
+        self.spines = np.load(fname_spines)
+        print ("spines.shape: ", self.spines.shape)
+
+        # partition space 
+        box_width, box_length = 80, 80    # length in centimeters
+
+        # centre to 0,0
+        self.spines[:,:,0] -= np.min(self.spines[:,:,0])
+        self.spines[:,:,1] -= np.min(self.spines[:,:,1])
+
+        xmax = np.max(self.spines[:,:,0])
+        #ymax = np.max(self.spines[:,:,1])
+
+        #print (xmax,ymax)
+        pixels_per_cm = xmax / box_width
+
+        # convert DLC coords to cm
+        self.spines = self.spines/pixels_per_cm
+
+        # clip into data
+        self.spines = self.spines[:,self.movie_idxs]
 
         #
         def update_plot(i):
 
-            
             #
-            ax.set_title("frame: "+str(i)) 
 
-            scat1.set_offsets([self.real_locs[i,0],
-                             self.real_locs[i,1]])
+            #
+            #scat1.set_offsets([self.spines[:,i,0].T,
+            #                   self.spines[:,i,1].T])
+
+            x = self.spines[:,self.ctr,0]
+            y = self.spines[:,self.ctr,1]
+
+            #
+            line_body.set_data(x,
+                               y)
             
             #
-            scat2.set_offsets([self.predicted_locs[i,0],
-                             self.predicted_locs[i,1]])
+            X, Y = x.reshape(-1,1), y.reshape(-1,1)
+            model = LinearRegression().fit(X, Y)
+
+            # plot the head direction
+            len1 = 50
+            x = x
+            y = y
+
+            #
+            x_new = np.arange(x.mean()-len1,x.mean()+len1,1).reshape(-1,1)
+            y_new = model.predict(x_new).squeeze()
+            x_new = x_new.squeeze()
+
+            # clip the line at 5cm  
+            if True:
+                #if x_new[0]>x.mean(0):
+                if x[-1]<x[0]:
+
+                    #
+                    if y[-1]<y[0]:
+                        x_new = x_new[len1:]
+                        y_new = y_new[len1:]
+                    #
+                    else:
+                        x_new = x_new[len1:]
+                        y_new = y_new[len1:]
+                #
+                else:
+                    #
+                    if y[-1]<y[0]:
+                        x_new = x_new[:len1]
+                        y_new = y_new[:len1]
+                    #
+                    else:
+                        x_new = x_new[:len1]
+                        y_new = y_new[:len1]
+
+            ######################################
+            # detect the angle between head direction and predicted location
+            v1 = [x[0]-x[-1],
+                  y[0]-y[-1]]
+            
+            v2 = [self.predicted_locs[self.ctr,0]-x[-1],
+                  self.predicted_locs[self.ctr,1]-y[-1]]
+
+            angle = np.math.atan2(np.linalg.det([v1,v2]),np.dot(v1,v2))
+
+            self.angles.append(angle)
+
+            #
+
+            # clip the line to fixed length of 10cm
+            if False:
+                ll2 = np.vstack((x_new,y_new)).T
+
+                cumsum = 0
+                dist_thresh = 20
+                for k in range(len(ll2)-1):     
+                    temp = ll2[k+1]-ll2[k]       
+                    cumsum += abs(np.linalg.norm(temp))
+                    if cumsum > dist_thresh:
+                        break
+                    
+                #print ("# of points: ", k)
+                x_new = x_new[:k]
+                y_new = y_new[:k]
+
+            # clip the line to fixed length of 10cm
+            line_proj.set_data([x_new,
+                                y_new])
+            
+            #
+            scat2.set_offsets([self.predicted_locs[self.ctr,0],
+                               self.predicted_locs[self.ctr,1]])
+
+            #
+            line.set_data(self.real_locs[self.ctr:self.ctr+100,0],
+                          self.real_locs[self.ctr:self.ctr+100,1])
+
+            #
+            ax.set_title("frame: "+str(i).zfill(5)+
+                         ", angle: "+str(np.round(angle*180/np.pi,2))+" deg"
+                         #", angle: "+str(angle)+" deg"
+                         )
 
             #
             self.ctr+=1
+            #bar.next()
 
         #
-        fig, ax = plt.subplots()        
-        self.ctr=0
-
-        #
-        scat1 = plt.scatter(self.real_locs[0,0],
-                           self.real_locs[0,1],
-                           c='blue', s=100)
+        self.ctr = 0
+        n_frames = self.real_locs.shape[0]
         
         #
-        scat2 = plt.scatter(self.predicted_locs[0,0],
-                            self.predicted_locs[0,1],
+        self.real_locs = self.spines[1].copy()
+        
+        #
+        bar = Bar('Processing', max=self.real_locs.shape[0])
+        
+        #
+        fig, ax = plt.subplots(figsize=(6,6))        
+
+        #
+        line_body, = ax.plot(self.spines[:,self.ctr,0],
+                             self.spines[:,self.ctr,1],
+                             c='blue')
+        #
+        #self.real_locs+= 5
+
+        # compute the head direction
+        from sklearn.linear_model import LinearRegression
+        x = self.spines[:,self.ctr,0]
+        y = self.spines[:,self.ctr,1]
+
+        X, Y = x.reshape(-1,1), y.reshape(-1,1)
+        model = LinearRegression().fit(X, Y)
+
+        # plot the head direction
+        len1 = 50
+        #x_new = np.arange(x.mean()-len1,x.mean()+len1,1).reshape(-1,1)
+        x_new = np.linspace(x*1.1,101).reshape(-1,1)
+        y_new = model.predict(x_new)
+
+        line_proj, = ax.plot(x_new.squeeze(), y_new, '--',
+                             c='blue')
+                
+        #
+        scat2 = plt.scatter(self.predicted_locs[self.ctr,0],
+                            self.predicted_locs[self.ctr,1],
                             c='orange',
                             s=100)
-        
+
+        line, = ax.plot(self.real_locs[self.ctr:self.ctr+100,0],
+                        self.real_locs[self.ctr:self.ctr+100,1],
+                        c='grey')
+
         #
         plt.xlim(0, 80)
         plt.ylim(0, 80)
+        n_frames = self.real_locs.shape[0]-10
 
         #
         ax = self.plot_grid(ax)
-        
-        #
+        plt.suptitle(self.animal_id+" "+self.session_id, fontsize=20)      
+          
+        #################################################
+        #################################################
+        #################################################
+        self.angles = []
+        self.dists = []
         ani = animation.FuncAnimation(fig, 
                                       update_plot, 
-                                      frames=np.arange(100),
+                                      frames=n_frames,
                                       #fargs=(scat1, scat2)
-
                                       )
+        #
+        #bar.finish()
         plt.show()
 
-
-        ani.save('/home/cat/test.avi', 
+        fname_out = os.path.join(self.root_dir,
+                                    self.animal_id,
+                                    self.session_id,
+                                    "bayes_decoder.mp4"
+                                    )
+        ani.save(fname_out, 
                 #writer='imagemagick', 
                 fps=20)
+            #
+        print ("Angles: ", self.angles)
 
+    def compute_angles(self):
+        
+        #
+        #start = self.movie_start_idx
+        #end = self.movie_end_idx
+
+        #
+        fname_csv = glob.glob(os.path.join(self.root_dir,
+                                            self.animal_id,
+                                            self.session_id,
+                                            "*0.csv"))[0]
+        
+        #
+        fname_spines = fname_csv[:-4] + '_spines.npy'
+
+
+        self.spines = np.load(fname_spines)
+
+        # partition space 
+        box_width, box_length = 80, 80    # length in centimeters
+
+        # centre to 0,0
+        self.spines[:,:,0] -= np.min(self.spines[:,:,0])
+        self.spines[:,:,1] -= np.min(self.spines[:,:,1])
+
+        xmax = np.max(self.spines[:,:,0])
+        #ymax = np.max(self.spines[:,:,1])
+
+        #print (xmax,ymax)
+        pixels_per_cm = xmax / box_width
+
+        # convert DLC coords to cm
+        self.spines = self.spines/pixels_per_cm
+
+        # clip into data
+        self.spines = self.spines[:,self.movie_idxs]
+
+        #
+        self.ctr = 0
+        n_frames = self.real_locs.shape[0]
+        
+        #
+        self.real_locs = self.spines[1].copy()
+        
+        ##########################################
+        self.angles = []
+        self.dists = []
+
+        for ctr in range(self.spines.shape[1]):
+            x = self.spines[:,ctr,0]
+            y = self.spines[:,ctr,1]
+
+            ######################################
+            # detect the angle between head direction and predicted location
+            v1 = [x[0]-x[-1],
+                    y[0]-y[-1]]
+            
+            v2 = [self.predicted_locs[ctr,0]-x[-1],
+                    self.predicted_locs[ctr,1]-y[-1]]
+
+            angle = np.math.atan2(np.linalg.det([v1,v2]),np.dot(v1,v2))
+
+            self.angles.append(angle)
+
+        #
+        print ("Angles: ", self.angles)
 
     # Iterate through all the sessions
     def train_bayes(self,
@@ -1515,8 +1942,8 @@ class Volition():
                  locs_partitioned,
                  partition_times,
                  partition,
-                 box_width,
-                 box_length,
+                 _,
+                 _,
                  locs_cm,
                  partition_size,
                  ) = get_data_decoders_2D(fname_locs,
@@ -1676,7 +2103,6 @@ class Volition():
 
         with open(fname_out[:-4]+'.pkl', 'rb') as outp:
             self.model_nb = pickle.load(outp)
-
        
         #
         d = np.load(fname_out, allow_pickle=True)
@@ -1879,3 +2305,16 @@ def get_prediction_data(root_dir,
     print("imm true: ", imm_true.shape)
 
     return imm_pred, imm_true, idx_imm_abs, locs_cm
+
+def compute_speed(locs_cm, time_frame = 0.05, smooth = True, frames_smooth = 100):
+    if smooth:
+        kernel = np.ones(frames_smooth) / frames_smooth
+        locs_cm[:,0] = np.convolve(locs_cm[:,0], kernel, mode='same')
+        locs_cm[:,1] = np.convolve(locs_cm[:,1], kernel, mode='same')
+
+    speed = np.sqrt((np.diff(locs_cm[:,0]))**2+(np.diff(locs_cm[:,1]))**2)/(time_frame)
+    speed = np.append(speed, 0)
+    if smooth:
+        kernel = np.ones(frames_smooth) / frames_smooth
+        speed = np.convolve(speed, kernel, mode='same')
+    return speed

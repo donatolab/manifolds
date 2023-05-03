@@ -98,6 +98,11 @@ def run_UMAP(data,
 class Calcium():
 
     def __init__(self):
+
+        #
+        self.save_python = True
+        self.save_matlab = False
+
         self.sample_rate = 30
         #print ("Sample rate: ", self.sample_rate, "hz")
 
@@ -135,11 +140,20 @@ class Calcium():
         #
         self.recompute_binarization = False
 
+        #
+
     #
     def load_calcium(self):
 
+        try:
+            print (self.fname) 
+        except:
+            print ("using default file location")
+            self.fname = os.path.join(self.data_dir, 'F.npy')
+
         self.calcium_data = np.load(self.fname)
 
+    #
     def fix_data_dir(self):
         
         # check if data structured as in suite2p output
@@ -674,31 +688,36 @@ class Calcium():
         #
         if os.path.exists(fname_out) and self.recompute_binarization==False:
             data = np.load(fname_out, allow_pickle=True)
-            self.F = data["F_raw"]
-            self.F_onphase_bin = data['F_onphase']
-            self.F_upphase_bin = data['F_upphase']
-            self.spks = data['spks']
-            self.spks_smooth_bin = data['spks_smooth_upphase']
-            self.detrend_model_order = data['detrend_model_order']
-            self.high_cutoff = data['high_cutoff']
-            self.low_cutoff = data['low_cutoff']
+            try:
+                self.F = data["F_raw"]
+                self.F_onphase_bin = data['F_onphase']
+                self.F_upphase_bin = data['F_upphase']
+                self.spks = data['spks']
+                self.spks_smooth_bin = data['spks_smooth_upphase']
+                self.detrend_model_order = data['detrend_model_order']
+                self.high_cutoff = data['high_cutoff']
+                self.low_cutoff = data['low_cutoff']
 
-            # raw and filtered data;
-            self.F_filtered = data['F_filtered']
-            self.F_processed = data['F_processed']
-            self.spks_x_F = data['oasis_x_F']
-            self.dff = data['DFF']
-            self.F_detrended = data['F_detrended']
+                # raw and filtered data;
+                self.F_filtered = data['F_filtered']
+                self.F_processed = data['F_processed']
+                self.spks_x_F = data['oasis_x_F']
+                self.dff = data['DFF']
+                self.F_detrended = data['F_detrended']
 
-            # parameters saved to file as dictionary
-            self.oasis_thresh_prefilter = data['oasis_thresh_prefilter']
-            self.min_thresh_std_oasis = data['min_thresh_std_oasis']
-            self.min_thresh_std_onphase = data['min_thresh_std_onphase']
-            self.min_thresh_std_upphase = data['min_thresh_std_upphase']
-            self.min_width_event_onphase = data['min_width_event_onphase']
-            self.min_width_event_upphase = data['min_width_event_upphase']
-            self.min_width_event_oasis = data['min_width_event_oasis']
-            self.min_event_amplitude = data['min_event_amplitude']
+                # parameters saved to file as dictionary
+                self.oasis_thresh_prefilter = data['oasis_thresh_prefilter']
+                self.min_thresh_std_oasis = data['min_thresh_std_oasis']
+                self.min_thresh_std_onphase = data['min_thresh_std_onphase']
+                self.min_thresh_std_upphase = data['min_thresh_std_upphase']
+                self.min_width_event_onphase = data['min_width_event_onphase']
+                self.min_width_event_upphase = data['min_width_event_upphase']
+                self.min_width_event_oasis = data['min_width_event_oasis']
+                self.min_event_amplitude = data['min_event_amplitude']
+            except:
+                print ("missing data, rerunning binairzation")
+                self.recompute_binarization = True
+                self.binarize_fluorescence()
 
             if self.verbose:
                 print ("   todo: print binarization defaults...")
@@ -875,6 +894,7 @@ class Calcium():
 
         return traces_bin
 
+    #
     def binarize_fluorescence(self):
 
         #
