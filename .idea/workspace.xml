@@ -5,9 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="b815b19d-cc94-437c-97ff-ffc3f0372acd" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/donlabtools/opexebo_place_field_analysis/opexebo_1P_data_session.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/donlabtools/opexebo_place_field_analysis/opexebo_1P_data_session.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/donlabtools/volition/decode_stationary.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/donlabtools/volition/decode_stationary.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/donlabtools/volition/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/donlabtools/volition/utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/donlabtools/volition/decode_stationary.ipynb" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

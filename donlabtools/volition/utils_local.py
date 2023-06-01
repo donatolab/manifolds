@@ -1600,7 +1600,198 @@ class Volition():
         self.locs_cm = np.int32(locs_cm.copy()[start:])
 
     #
-    def make_movies(self):
+    def make_movies_realtime(self):
+
+        #
+        from matplotlib import animation
+        from progress.bar import Bar
+
+        start = self.movie_start_idx
+        end = self.movie_end_idx
+        
+        #
+        fname_csv = glob.glob(os.path.join(self.root_dir,
+                                            self.animal_id,
+                                            self.session_id,
+                                            "*0.csv"))[0]
+        
+        #
+        fname_spines = fname_csv[:-4] + '_spines.npy'
+
+
+        self.spines = np.load(fname_spines)
+        print ("spines.shape: ", self.spines.shape)
+
+        # partition space 
+        box_width, box_length = 80, 80    # length in centimeters
+
+        # centre to 0,0
+        self.spines[:,:,0] -= np.min(self.spines[:,:,0])
+        self.spines[:,:,1] -= np.min(self.spines[:,:,1])
+
+        xmax = np.max(self.spines[:,:,0])
+        #ymax = np.max(self.spines[:,:,1])
+
+        #print (xmax,ymax)
+        pixels_per_cm = xmax / box_width
+
+        # convert DLC coords to cm
+        self.spines = self.spines/pixels_per_cm
+
+        # add 10 idxes to the movie idx
+        idx = np.concatenate((self.movie_idxs,np.arange(self.movie_idxs[-1]+1,self.movie_idxs[-1]+11)))
+        self.spines = self.spines[:,idx]
+
+        #
+        def update_plot(i):
+
+            #
+            scat_real.set_offsets([self.real_locs[self.ctr,0],
+                                   self.real_locs[self.ctr,1]])
+            
+            #
+            line_real_future.set_data(self.real_locs[self.ctr:self.ctr+100,0],
+                                      self.real_locs[self.ctr:self.ctr+100,1])
+
+            ############################
+            scat_pred.set_offsets([self.predicted_locs[self.ctr,0],
+                                   self.predicted_locs[self.ctr,1]])
+            
+            data_in = np.vstack((self.predicted_locs[self.ctr:self.ctr+100,0],
+                                self.predicted_locs[self.ctr:self.ctr+100,1])).T
+            
+            #
+            #print (data_in.shape)
+            scat_pred_future.set_offsets(data_in)
+
+            #            
+            line_pred_future.set_data(self.predicted_locs[self.ctr:self.ctr+100,0],
+                                      self.predicted_locs[self.ctr:self.ctr+100,1])
+            
+            #
+            #line_real_past.set_data(self.real_locs[self.ctr-100:self.ctr,0],
+            #                        self.real_locs[self.ctr-100:self.ctr,1])
+
+            #            
+
+            #
+            #line_real.set_data(self.real_locs[self.ctr:self.ctr+100,0],
+            #              self.real_locs[self.ctr:self.ctr+100,1])
+
+            #
+            ax.set_title("frame: "+str(i).zfill(5)
+                         #", angle: "+str(np.round(angle*180/np.pi,2))+" deg"
+                         #", angle: "+str(angle)+" deg"
+                         )
+
+            #
+            self.ctr+=1
+            #bar.next()
+
+        #
+        self.ctr = 0
+        #n_frames = self.real_locs.shape[0]
+        n_frames = self.movie_idxs.shape[0]
+        print ('n-frames: ', n_frames)
+        
+        #
+        self.real_locs = self.spines[1].copy()
+        
+        # repeat last value of predicted locs 100 times
+        insert = np.repeat(self.predicted_locs[-1][None],100,axis=0)
+        self.predicted_locs = np.concatenate((self.predicted_locs, 
+                                                insert))
+        # saem for real locs
+        insert = np.repeat(self.real_locs[-1][None],100,axis=0)       
+        self.real_locs = np.concatenate((self.real_locs,
+                                            insert))
+        
+        
+        #
+        fig, ax = plt.subplots(figsize=(6,6))        
+
+        #
+        scat_real = plt.scatter(self.real_locs[self.ctr,0],
+                            self.real_locs[self.ctr,1],
+                            c='grey',
+                            s=200)
+        
+
+        line_real_future, = ax.plot(self.real_locs[self.ctr:self.ctr+100,0],
+                        self.real_locs[self.ctr:self.ctr+100,1],
+                        c='grey')
+                                            
+        ########################
+        
+        scat_pred = plt.scatter(self.predicted_locs[self.ctr,0],
+                            self.predicted_locs[self.ctr,1],
+                            c='red',
+                            s=200)
+        
+        sizes = np.arange(10,210,2)[::-1]
+        sizes = np.zeros(100)+50
+        scat_pred_future = plt.scatter([self.predicted_locs[self.ctr:self.ctr+100,0]],
+                                       [self.predicted_locs[self.ctr:self.ctr+100,1]],
+                                       c='orange',
+                                       s=sizes)
+        
+        line_pred_future, = ax.plot(self.predicted_locs[self.ctr:self.ctr+100,0],
+                                    self.predicted_locs[self.ctr:self.ctr+100,1],
+                                  c='orange')
+
+        #line_pred_past, = ax.plot(self.predicted_locs[self.ctr-100:self.ctr,0],
+        #                          self.predicted_locs[self.ctr-100:self.ctr,1],
+        #                          linestyle='--',
+        #                          c='lightblue')
+        
+
+
+        #line_real_past, = ax.plot(self.real_locs[self.ctr-100:self.ctr,0],
+        #                          self.real_locs[self.ctr-100:self.ctr,1],
+        #                          linestyle = '--',
+        #                          c='lightblue')
+
+
+
+
+
+        #
+        plt.xlim(0, 80)
+        plt.ylim(0, 80)
+        #n_frames = self.real_locs.shape[0]-10
+
+        #
+        ax = self.plot_grid(ax)
+        plt.suptitle(self.animal_id+" "+self.session_id, fontsize=20)      
+          
+        #################################################
+        #################################################
+        #################################################
+        self.angles = []
+        self.dists = []
+        ani = animation.FuncAnimation(fig, 
+                                      update_plot, 
+                                      frames=n_frames,
+                                      #fargs=(scat1, scat2)
+                                      )
+        #
+        #bar.finish()
+        plt.show()
+
+        fname_out = os.path.join(self.root_dir,
+                                    self.animal_id,
+                                    self.session_id,
+                                    "bayes_decoder_realtime_"+str(start)+"_"+str(end)+".mp4"
+                                    )
+        ani.save(fname_out, 
+                #writer='imagemagick', 
+                fps=20)
+            #
+        print ("Angles: ", self.angles)
+
+
+    #
+    def make_movies_headangle(self):
 
         #
         from matplotlib import animation
@@ -1730,8 +1921,24 @@ class Volition():
                                 y_new])
             
             #
-            scat2.set_offsets([self.predicted_locs[self.ctr,0],
-                               self.predicted_locs[self.ctr,1]])
+            scat_pred.set_offsets([self.predicted_locs[self.ctr,0],
+                                   self.predicted_locs[self.ctr,1]])
+            
+            data_in = np.vstack((self.predicted_locs[self.ctr:self.ctr+100,0],
+                                self.predicted_locs[self.ctr:self.ctr+100,1])).T
+            
+            #
+            #print (data_in.shape)
+            scat_pred_future.set_offsets(data_in)
+
+
+            #            
+            line_pred_future.set_data(self.predicted_locs[self.ctr:self.ctr+100,0],
+                                      self.predicted_locs[self.ctr:self.ctr+100,1])
+            
+
+            line_pred.set_data(self.predicted_locs[self.ctr:self.ctr+100,0],
+                          self.predicted_locs[self.ctr:self.ctr+100,1])
 
             #
             line.set_data(self.real_locs[self.ctr:self.ctr+100,0],
@@ -1763,6 +1970,7 @@ class Volition():
         #
         line_body, = ax.plot(self.spines[:,self.ctr,0],
                              self.spines[:,self.ctr,1],
+                             linewidth=2,
                              c='blue')
         #
         #self.real_locs+= 5
@@ -1777,6 +1985,7 @@ class Volition():
 
         # plot the head direction
         len1 = 50
+
         #x_new = np.arange(x.mean()-len1,x.mean()+len1,1).reshape(-1,1)
         x_new = np.linspace(x*1.1,101).reshape(-1,1)
         y_new = model.predict(x_new)
@@ -1785,14 +1994,41 @@ class Volition():
                              c='blue')
                 
         #
-        scat2 = plt.scatter(self.predicted_locs[self.ctr,0],
+        scat_pred = plt.scatter(self.predicted_locs[self.ctr,0],
                             self.predicted_locs[self.ctr,1],
-                            c='orange',
-                            s=100)
+                            c='red',
+                            s=200)
+        
+        sizes = np.arange(10,210,2)[::-1]
+        sizes = np.zeros(100)+50
+        scat_pred_future = plt.scatter([self.predicted_locs[self.ctr:self.ctr+100,0]],
+                                       [self.predicted_locs[self.ctr:self.ctr+100,1]],
+                                       c='orange',
+                                       s=sizes)
+        
+        line_pred_future, = ax.plot(self.predicted_locs[self.ctr:self.ctr+100,0],
+                                    self.predicted_locs[self.ctr:self.ctr+100,1],
+                                  c='orange')
+        
+
+
+        #scat_pred = plt.scatter(self.predicted_locs[self.ctr,0],
+        #                    self.predicted_locs[self.ctr,1],
+        #                    c='Red',
+        #                    s=200)
+        
+
+        line_pred, = ax.plot(self.predicted_locs[self.ctr:self.ctr+100,0],
+                        self.predicted_locs[self.ctr:self.ctr+100,1],
+                        c='orange')
+        
+
 
         line, = ax.plot(self.real_locs[self.ctr:self.ctr+100,0],
                         self.real_locs[self.ctr:self.ctr+100,1],
                         c='grey')
+        
+
 
         #
         plt.xlim(0, 80)
@@ -1820,7 +2056,7 @@ class Volition():
         fname_out = os.path.join(self.root_dir,
                                     self.animal_id,
                                     self.session_id,
-                                    "bayes_decoder.mp4"
+                                    "bayes_decoder_headangle_"+str(start)+"_"+str(end)+".mp4"
                                     )
         ani.save(fname_out, 
                 #writer='imagemagick', 
@@ -1853,10 +2089,24 @@ class Volition():
         self.spines[:,:,0] -= np.min(self.spines[:,:,0])
         self.spines[:,:,1] -= np.min(self.spines[:,:,1])
 
-        xmax = np.max(self.spines[:,:,0])
-        #ymax = np.max(self.spines[:,:,1])
+        # here we allow for any roll greater or less than 100 time points
+        if self.shuffle_angles:
+            start = int(self.spines.shape[1]//2-self.spines.shape[1]//2*.5)
+            end = int(self.spines.shape[1]//2+self.spines.shape[1]//2*.5)
+            start = -self.spines.shape[1]
+            end = self.spines.shape[1]
+            ids = np.arange(start,end)
+            idx = np.where(np.abs(ids)<100)[0]
+            ids = np.delete(ids, idx)
+            #
+            shift = np.random.choice(ids)
 
-        #print (xmax,ymax)
+            self.spines = np.roll(self.spines, shift, axis=1)
+
+        #
+        xmax = np.max(self.spines[:,:,0])
+
+        #
         pixels_per_cm = xmax / box_width
 
         # convert DLC coords to cm

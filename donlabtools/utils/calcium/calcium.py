@@ -19,7 +19,11 @@ from scipy.signal import butter, sosfilt, sosfreqz
 from sklearn import datasets, linear_model
 from scipy import stats
 
-#from utils.wheel import wheel
+import sys
+module_path = os.path.abspath(os.path.join('..'))
+sys.path.append(module_path)
+
+from utils.wheel import wheel
 #from utils.calcium import calcium
 #from utils.animal_database import animal_database
 from statistics import NormalDist#, mode
@@ -697,6 +701,11 @@ class Calcium():
                 self.detrend_model_order = data['detrend_model_order']
                 self.high_cutoff = data['high_cutoff']
                 self.low_cutoff = data['low_cutoff']
+                
+                try:
+                    self.DFF = data['DFF']
+                except:
+                    print ("DFF not found in file")
 
                 # raw and filtered data;
                 self.F_filtered = data['F_filtered']
@@ -1013,6 +1022,7 @@ class Calcium():
             self.F_processed = self.F_filtered
 
             #
+            print ("...saving data...")
             if self.save_python:
                 np.savez(fname_out,
                      # binarization data
@@ -1599,6 +1609,7 @@ class Calcium():
 
         return segs, clrs
 
+    #
     def find_candidate_neurons_overlaps(self):
 
         dist_corr_matrix = []
@@ -1619,7 +1630,7 @@ class Calcium():
 
         #####################################################
         idx1 = np.where(dist_corr_matrix[:, 3] >= self.corr_max_percent_overlap)[0]
-        idx2 = np.where(dist_corr_matrix[idx1, 2] >= self.corr_threshold)[0]
+        idx2 = np.where(dist_corr_matrix[idx1, 2] >= self.corr_threshold)[0]   # note these are zscore thresholds for zscore method
         idx3 = idx1[idx2]
 
         #
@@ -1694,6 +1705,7 @@ class Calcium():
             removed_cells = []
             
         # 
+        print ("Removed cells: ", len(removed_cells))
         clean_cells = np.delete(np.arange(self.F.shape[0]),
                               removed_cells)
 
@@ -1733,105 +1745,210 @@ class Calcium():
                         alpha=.1,
                         edgecolor='red')
 
+    def shuffle_rasters(self, rasters, rasters_DFF):
+        
+        # get many random indexes and then roll the data
+        idx = np.random.choice(np.arange(rasters.shape[1]), rasters.shape[1], replace=True)
 
+        for k in range(rasters.shape[0]):
+            #np.random.shuffle(idx)
+            rasters[k] = np.roll(rasters[k], idx[k])
+            rasters_DFF[k] = np.roll(rasters_DFF[k], idx[k])
+
+        return  rasters, rasters_DFF
+    
     #
     def compute_correlations(self):
 
-
-        #
-        fname_out = os.path.join(self.data_dir,
-                                 'allcell_correlation_data_' + self.correlation_datatype + '.npy'
-                                 )
-        fname_out_array = os.path.join(self.data_dir,
-                                 'allcell_correlation_array_' + self.correlation_datatype + '.npy'
-                                 )
-
         ############## COMPUTE CORRELATIONS ###################
-        if os.path.exists(fname_out) == False or self.recompute_deduplication:
+
+        # turn off intrinsic parallization or this step goes too slow
+        os.environ['OPENBLAS_NUM_THREADS'] = '1'
+        os.environ['OMP_NUM_THREADS']= '1'
+
+        # compute correlations between neurons
+        rasters_DFF = self.dff   # use fluorescence filtered traces
+        rasters = self.F_upphase_bin
+
+        # here we shuffle data as a control
+        if self.shuffle_data:
+            rasters, rasters_DFF = self.shuffle_rasters(rasters, rasters_DFF)
+
+
+        # if we subselect for moving periods only using wheel data velcoity
+        #if self.subselect_moving_only:
+
+        # assume wheel data is there
+        wheel_flag = True  
+        try:
+            w = wheel.Wheel()
+            w.root_dir = os.path.join(self.root_dir,
+                                        self.animal_id,
+                                        self.session,
+                                        'TRD-2P')       
+            w.load_track()
+            
+            w.compute_velocity()
+            
+            # 
+            w.max_velocity_quiescent = 0.005  # in metres per second
+            self.idx_quiescent = w.get_indexes_quiescent_periods()
+
+            #
+            w.min_velocity_running = 0.02  # in metres per second
+            self.idx_run = w.get_indexes_run_periods()
+        except:
+            print ("Wheel data couldn't be processed, only using all data")
+            wheel_flag = False
+
+        
+        # select moving
+        text = 'all_states'
+        if self.subselect_moving_only and wheel_flag:
+            rasters = rasters[:, self.idx_run]
+            rasters_DFF = rasters_DFF[:, self.idx_run]
+
+            # add moving flag to filenames
+            text = 'moving'
+
+        elif self.subselect_quiescent_only and wheel_flag:
+            rasters = rasters[:, self.idx_quiescent]
+            rasters_DFF = rasters_DFF[:, self.idx_quiescent]
+
+            # add moving flag to filenames
+            text = 'quiescent'
+
+        # make sure the data dir is correct
+        if self.shuffle_data:
+            data_dir = os.path.join(self.data_dir,'correlations_shuffled')
+        else:
+            data_dir = os.path.join(self.data_dir,'correlations')
+
+        
+        # check if dir exists or make it
+        if os.path.exists(data_dir)==False:
+            os.mkdir(data_dir)
+        
+        # next add the behavioral state to the filename
+        data_dir = os.path.join(data_dir, text)
+
+        # check if dir exists or make it
+        if os.path.exists(data_dir)==False:
+            os.mkdir(data_dir)
+
+        # select only good ids 
+        #rasters = rasters[self.clean_cell_ids]
+        #rasters_DFF = rasters_DFF[self.clean_cell_ids]
+
+        # self.corrs = compute_correlations(rasters, self)
+        self.corrs = compute_correlations_parallel(data_dir,
+                                                    rasters,
+                                                    rasters_DFF,
+                                                    self.n_cores,
+                                                    # self.correlation_method,
+                                                    self.binning_window,
+                                                    self.subsample,
+                                                    self.scale_by_DFF,
+                                                    self.corr_parallel_flag,
+                                                    self.zscore,
+                                                    self.n_tests_zscore,
+                                                    self.recompute_correlation,)
+
+    #
+    def load_correlation_array(self):
+        
+        #
+        text = 'all_states'
+        if self.subselect_moving_only:
+            text = 'moving'
+        elif self.subselect_quiescent_only:
+            text = 'quiescent'
+
+        text2 = 'threshold'
+        if self.zscore:
+            text2 = 'zscore'
+
+        data_dir = os.path.join(self.data_dir,'correlations',
+                                text,
+                                text2,
+                                'correlations')
+
+        # loop over all cells
+        self.corr_array = np.zeros((self.F.shape[0],
+                                    self.F.shape[0],2))
+        
+        #
+        for k in range(self.F.shape[0]):
+            fname = os.path.join(data_dir, str(k) + '.npz')
+            data = np.load(fname, allow_pickle=True)
+            pcorr = data['pearson_corr']
+            pcorr_z = data['z_score_pearson_corr']
+
+            #
+            if self.zscore:
+                self.corr_array[k, :, 0] = pcorr_z
+
+                # need to change the corr_threshold variable to deal with zscored data
+                self.corr_threshold = self.zscore_threshold
+
+            else:
+                self.corr_array[k, :, 0] = pcorr
+
+    #
+    def remove_duplicate_neurons(self):
+
+        # make sure the data dir is correct
+        text = 'all_states'
+        if self.subselect_moving_only:
+            text = 'moving'
+        elif self.subselect_quiescent_only:
+            text = 'quiescent'
+
+        text2 = 'threshold'
+        if self.zscore:
+            text2 = 'zscore'
+
+        data_dir = os.path.join(self.data_dir,'correlations',
+                                text,
+                                text2)
+        
+        # make file name
+        fname_cleanids  = os.path.join(data_dir,
+                                     'good_ids_post_deduplication_' + self.correlation_datatype + '.npy'
+                                     )
+        #
+        if os.path.exists(fname_cleanids)==False or self.recompute_deduplication:
 
             # turn off intrinsice parallization or this step goes too slow
             os.environ['OPENBLAS_NUM_THREADS'] = '1'
             os.environ['OMP_NUM_THREADS']= '1'
 
-            # if self.deduplication_method == 'centre_distance':
+            # first need to reconstruct the correlation array depending on the method used
+            self.load_correlation_array()
+
+            # finds distances between cell centres
             self.dists, self.dists_upper = find_inter_cell_distance(self.footprints)
+            
+            # uses the dists metric to triage and then computes spatial overlap in terms of pixels
+            self.df_overlaps = generate_cell_overlaps(self, data_dir)
 
-            # compute correlations between neurons
-            if self.correlation_datatype == 'filtered':
-                #rasters = self.F_filtered   # use fluorescence filtered traces
-                rasters = self.F_detrended   # use fluorescence filtered traces
-            elif self.correlation_datatype == 'upphase':
-                rasters = self.F_upphase_bin
-            else:
-                print ("ERROR datatype not known ")
-
-            # self.corrs = compute_correlations(rasters, self)
-            self.corrs = compute_correlations_parallel(rasters,
-                                                       self.n_cores)
-
-            # save data out
-            np.save(fname_out, self.corrs)
-        else:
-            self.corrs = np.load(fname_out)
-
-        ########## MAKE CORRELATION ARRAY #########
-        if os.path.exists(fname_out_array) == False or self.recompute_correlation:
-
-            # make the final correlation array
-            self.corr_array = make_correlation_array(self.corrs, self.F_upphase_bin.shape[0])
-
-            # save only the pearson corr value; not the pvalue
-            np.save(fname_out_array, self.corr_array)
-
-        #
-        else:
-            #
-            self.corr_array = np.load(fname_out_array)
-
-    #
-    def remove_duplicate_neurons(self):
-
-        #
-        fname_clean_corr_array  = os.path.join(self.data_dir,
-                                 'goodcell_correlations_array_post_deduplication_' + self.correlation_datatype + '.npy'
-                                 )
-
-        #
-        if os.path.exists(fname_clean_corr_array)==False or self.recompute_deduplication:
-
-            # elif self.deduplication_method == 'overlap':
-            self.df_overlaps = generate_cell_overlaps(self)
-
-            # find neurons that are below threhsolds
+            # combines overlaps with correlation values to make graphs 
             if self.deduplication_method =='centre_distance':
                 self.candidate_neurons = self.find_candidate_neurons_centers()
             elif self.deduplication_method == 'overlap':
                 self.candidate_neurons = self.find_candidate_neurons_overlaps()
 
-
-            # find connected neurons
-            #      also reduce network pairs to single nodes
+            # uses connected components to find groups of neurons that are correlated
             self.make_correlated_neuron_graph()
 
-            #
+            # uses the graph to find the best neuron in each group
             self.clean_cell_ids  = self.delete_duplicate_cells()
 
             # save clean cell ids:
-            fname_cleanids  = os.path.join(self.data_dir,
-                                     'good_ids_post_deduplication_' + self.correlation_datatype + '.npy'
-                                     )
             np.save(fname_cleanids, self.clean_cell_ids)
-
-            # resave the the correlation array
-            print ("pre clean corr array: ", self.corr_array.shape)
-            print ("clean cell ids: ", self.clean_cell_ids.shape)
-
-            #
-            self.corr_array = self.corr_array[self.clean_cell_ids][:,self.clean_cell_ids,0]
-            print ("pre clean corr array: ", self.corr_array.shape)
-
-            #
-            np.save(fname_clean_corr_array, self.corr_array)
+        
+        else:
+            self.clean_cell_ids = np.load(fname_cleanids)
 
     #
     def load_good_cell_ids(self):
@@ -1917,6 +2034,7 @@ def del_highest_connected_nodes(nn, c):
 
         if ids.shape[0] == 1:
             break
+        
 
         corrs = get_correlations(ids, c)
         if c.verbose:
@@ -2136,48 +2254,301 @@ def find_inter_cell_distance(footprints):
     return dists, dists_upper
 
 
-def correlations_parallel(ids, rasters, subsample=5):
+def get_corr(temp1, temp2, zscore=False, n_tests=500):
+    
+    # 
+    # check if all values are the same
+    if np.all(temp1==temp1[0]):
+        corr = [np.nan,1]
+        return corr
+
+    if np.all(temp2==temp2[0]):
+        corr = [np.nan,1]
+        return corr
+
+    # if using dynamic correlation we need to compute the correlation for 1000 shuffles
+    corr = scipy.stats.pearsonr(temp1, temp2)
+
+    if zscore:
+        corr_s = []
+        for k in range(n_tests):
+            # choose a random index ranging from 0 to the length of the array minus 1
+            idx = np.random.randint(100, temp2.shape[0] - 100)
+            temp2_shuffled = np.roll(temp2, idx)
+            corr_s.append(scipy.stats.pearsonr(temp1, temp2_shuffled)[0])
+        corr_s = np.array(corr_s)
+
+        # compute the zscore of the corr vs. corr_s array
+        corr_z = (corr[0] - np.mean(corr_s)) / np.std(corr_s)
+
+        #
+        corr = [corr[0], corr_z]
+
+    #
+    return corr
+
+#
+def get_corr2(temp1, temp2, zscore, n_tests=1000):
+    # 
+    # check if all values are the same
+    if np.all(temp1==temp1[0]):
+        corr = [np.nan,1]
+        return corr, [np.nan]
+
+    if np.all(temp2==temp2[0]):
+        corr = [np.nan,1]
+        return corr, [np.nan]
+
+    # if using dynamic correlation we need to compute the correlation for 1000 shuffles
+    corr_original = scipy.stats.pearsonr(temp1, temp2)
+
+    # make array and keep track
+    corr_array = []
+    corr_array.append(corr_original[0])
+                                
+    #
+    if zscore:
+        corr_s = []
+        for k in range(n_tests):
+            # choose a random index ranging from 0 to the length of the array minus 1
+            idx = np.random.randint(-temp2.shape[0], temp2.shape[0],1)
+            #idx = np.random.randint(temp2.shape[0])
+            temp2_shuffled = np.roll(temp2, idx)
+            corr_s = scipy.stats.pearsonr(temp1, temp2_shuffled)
+            corr_array.append(corr_s[0])
+
+        # compute z-score
+        corr_z = stats.zscore(corr_array)
+
+    else:
+        corr_z = [np.nan]
+        
+    return corr_original, corr_z
+
+
+# this computes the correlation for a single cell against all others and then saves it to disk
+def correlations_parallel2(id, 
+                           c1):
+
+    # extract values from dicionary c1
+    data_dir = c1["data_dir"]
+    rasters = c1["rasters"]
+    rasters_DFF = c1["rasters_DFF"]
+    binning_window = c1["binning_window"]
+    subsample = c1["subsample"]
+    scale_by_DFF = c1["scale_by_DFF"]
+    zscore = c1["zscore"]
+    n_tests = c1["n_tests"]
+    recompute_correlation = c1["recompute_correlation"]
+
+    # 
+    fname_out = os.path.join(data_dir,
+                                str(id)+ '.npz'
+                                )
+
+    # not used for now, but may wish to skip computation if file already exists
+    if os.path.exists(fname_out) and recompute_correlation==False:
+        return
+
+    #        
+    temp1 = rasters[id][::subsample]
+
+    # scale by rasters_DFF
+    if scale_by_DFF:
+        temp1 = temp1*rasters_DFF[id][::subsample]
+
+    # bin data in chunks of size binning_window
+    if binning_window!=1:
+        tt = []
+        for q in range(0, temp1.shape[0], binning_window):
+            temp = np.sum(temp1[q:q + binning_window])
+            tt.append(temp)
+        temp1 = np.array(tt)
+
+    #
+    corrs = []
+    for p in range(rasters.shape[0]):
+        temp2 = rasters[p][::subsample]
+        
+        # scale by rasters_DFF
+        if scale_by_DFF:
+            temp2 = temp2*rasters_DFF[p][::subsample]
+        
+        # 
+        if binning_window!=1:
+            tt = []
+            for q in range(0, temp2.shape[0], binning_window):
+                temp = np.sum(temp2[q:q + binning_window])
+                tt.append(temp)
+            temp2 = np.array(tt)
+        
+        #
+        corr, corr_z = get_corr2(temp1, temp2, zscore, n_tests)
+
+        # 
+        corrs.append([id, p, corr[0], corr[1], corr_z[0]])
+
+    #
+    corrs = np.vstack(corrs)
+
+    #
+    np.savez(fname_out, 
+             binning_window = binning_window,
+             subsample = subsample,
+             scale_by_DFF = scale_by_DFF,
+             zscore_flag = zscore,
+             id = id,
+             compared_cells = corrs[:,1],
+             pearson_corr = corrs[:,2],
+             pvalue_pearson_corr = corrs[:,3],
+             z_score_pearson_corr = corrs[:,4],
+             n_tests = n_tests,
+            )
+
+    #return corrs
+
+
+
+#
+def correlations_parallel(ids, 
+                          rasters, 
+                          rasters_DFF,
+                          method='all', 
+                          binning_window=30,                          
+                          subsample=5,
+                          scale_by_DFF=True,
+                          zscore=False,):
         
     corrs = []
     for k in ids: #,desc='computing intercell correlation'):
-        temp1 = rasters[k][::5]
+        temp1 = rasters[k][::subsample]
+
+        # scale by rasters_DFF
+        if scale_by_DFF:
+            temp1 = temp1*rasters_DFF[k][::subsample]
+
+        # bin data in chunks of size binning_window
+        if binning_window!=1:
+            tt = []
+            for q in range(0, temp1.shape[0], binning_window):
+                temp = np.sum(temp1[q:q + binning_window])
+                tt.append(temp)
+            temp1 = np.array(tt)
+
         #
         for p in range(rasters.shape[0]):
-            temp2 = rasters[p][::5]
-            try:
-                corr = scipy.stats.pearsonr(temp1,
-                                        temp2)
-            except:
-                print ("corr not defined: ")
-                corr = [0,1]
+            temp2 = rasters[p][::subsample]
+            
+            # scale by rasters_DFF
+            if scale_by_DFF:
+                temp2 = temp2*rasters_DFF[p][::subsample]
+            
+            #print ("temp2: ", temp2.shape)
+            if binning_window!=1:
+                tt = []
+                for q in range(0, temp2.shape[0], binning_window):
+                    #print (q)
+                    temp = np.sum(temp2[q:q + binning_window])
+                    tt.append(temp)
+                temp2 = np.array(tt)
 
+            #
+            #corr = get_corr(temp1, temp2, zscore)
+            
+            #
+            corr, corr_z, corr_array = get_corr2(temp1, temp2, zscore)
+
+            #print ("corr: ", corr)
+            #cz.append(corr_z[0])
+
+            # 
             corrs.append([k, p, corr[0], corr[1]])
     
     return corrs
 
-def compute_correlations_parallel(rasters,
-                                  n_cores):
+def compute_correlations_parallel(data_dir,
+                                  rasters,
+                                  rasters_DFF,
+                                  n_cores,
+                                  #method='all',
+                                  binning_window=30,
+                                  subsample=5,
+                                  scale_by_DFF=False,
+                                  corr_parallel_flag=True,
+                                  zscore=False,
+                                  n_tests_zscore=1000,
+                                  recompute_correlation=False,):
 
+    # 
+
+    # make a small class to hold all the input variables
+    class C:
+        pass
+
+    c1 = C()
+    c1.n_cores = n_cores
+    c1.n_tests = n_tests_zscore
+    #c1.correlation_method = method
+    c1.binning_window = binning_window
+    c1.subsample = subsample
+    c1.scale_by_DFF = scale_by_DFF
+    c1.corr_parallel_flag = corr_parallel_flag
+    c1.zscore = zscore
+    c1.rasters = rasters
+    c1.rasters_DFF = rasters_DFF
+    c1.recompute_correlation = recompute_correlation
+    
     #
     print ("... computing pairwise pearson correlation ...")
     print (" RASTERS IN: ", rasters.shape)
+    print (" BINNING WINDOW: ", binning_window)
+
     # split data
-    ids = np.array_split(np.arange(rasters.shape[0]),100)
+    #ids = np.array_split(np.arange(rasters.shape[0]),100)
+    # for correlations_parallel2 function we don't need to split ids anymore
+    ids = np.arange(rasters.shape[0])
 
+    # make output directory 'correlations'
+    # check to see if data_dir exists:
+    if os.path.exists(data_dir)==False:
+        os.mkdir(data_dir)
 
+    # add dynamic data_dir
+    if zscore:
+        data_dir = os.path.join(data_dir,'zscore')
+        if os.path.exists(data_dir)==False:
+            os.mkdir(data_dir)
+    else:
+        data_dir = os.path.join(data_dir,'threshold')
+        if os.path.exists(data_dir)==False:
+            os.mkdir(data_dir)
+
+    # finally add the 'correlations' directory
+    data_dir = os.path.join(data_dir,'correlations')
+    if os.path.exists(data_dir)==False:
+        os.mkdir(data_dir)
 
     #
-    res = parmap.map(correlations_parallel,
-                     ids,
-                     rasters,
-                     pm_processes=n_cores,
-                     pm_pbar = True)
+    c1.data_dir = data_dir
 
-    # unpack res file
-    corrs = np.vstack(res)
-    print ("Parallel corrs: ", corrs.shape) # if True:
+    # convert object into a dictionary
+    c1 = c1.__dict__
 
-    return corrs
+    #############################################################
+    #############################################################
+    #############################################################
+    # run parallel
+    if corr_parallel_flag:
+        parmap.map(correlations_parallel2,
+                    ids,
+                    c1,
+                    pm_processes=n_cores,
+                    pm_pbar = True
+                    )
+    else:
+        for k in tqdm(ids, desc='computing intercell correlation'):
+            correlations_parallel2(k,
+                                  c1)
 
 
 #
@@ -2224,8 +2595,10 @@ def make_correlation_array(corrs, n_cells):
     return corr_array
 
 
-def generate_cell_overlaps(c):
-    fname_out = os.path.join(c.data_dir,
+def generate_cell_overlaps(c,data_dir):
+
+    # this computes spatial overlaps between cells; doesn't take into account temporal correlations
+    fname_out = os.path.join(data_dir,
                              'cell_overlaps.pkl'
                              )
 
