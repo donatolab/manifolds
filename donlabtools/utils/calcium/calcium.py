@@ -269,13 +269,16 @@ class Calcium():
         self.F = np.float32(data[2:, 1:]).T
         self.F_times = np.float32(data[2:, 0])
 
-        #
-        self.std_global, _ = self.compute_std_global(self.F)
         if self.verbose:
             print ("cells: ", self.F.shape)
             print ("F times: ", self.F_times.shape)
-            print ("         mean std over all cells : ", self.std_global)
 
+        # scale F to 100 times smaller
+        self.F = self.F/100
+        
+        #self.std_global, _ = self.compute_std_global(self.F)
+            #print ("         mean std over all cells : ", self.std_global)
+        
 
     #
     def standardize(self, traces):
@@ -479,7 +482,8 @@ class Calcium():
         t = np.arange(traces[0].shape[0])
         # print ("... TODO: automate the polynomial fit search using RMS optimization?!...")
         #
-        for k in trange(traces.shape[0], desc='model filter: remove bleaching or trends'):
+        for k in trange(traces.shape[0], desc='model filter: remove bleaching or trends', position=0, 
+                        leave=True):
             #
             temp = traces[k]
             # if k==0:
@@ -508,8 +512,8 @@ class Calcium():
 
                     p = np.poly1d(z)
 
-                    if k == 0:
-                        plt.plot(t, p(t), c='black')
+                    #if k == 0:
+                    #    plt.plot(t, p(t), c='black')
 
                     temp = temp - p(t)
                     traces_out[k] = traces_out[k] - p(t)
@@ -667,7 +671,7 @@ class Calcium():
     def low_pass_filter(self, traces):
         #
         traces_out = traces.copy()
-        for k in trange(traces.shape[0], desc='low pass filter'):
+        for k in trange(traces.shape[0], desc='low pass filter',position=0, leave=True):
             #
             temp = traces[k]
 
@@ -864,7 +868,7 @@ class Calcium():
         traces_bin = traces.copy()
 
         #
-        for k in trange(traces.shape[0], desc='binarizing continuous traces '+text):
+        for k in trange(traces.shape[0], desc='binarizing continuous traces '+text, position =0, leave=True):
             temp = traces[k].copy()
 
             # find threshold crossings standard deviation based
@@ -934,8 +938,13 @@ class Calcium():
 
 
             # compute DF/F on raw data, important to get correct SNR values
-            self.f0s = np.median(self.F, axis=1)
-            self.dff = (self.F-self.f0s[:,None])/self.f0s[:,None]
+            # abs is required sometimes for inscopix data that returns baseline fixed data
+            self.f0s = np.abs(np.median(self.F, axis=1))
+            try:
+                if self.inscopix_flag:
+                    self.dff = self.F
+            except:
+                self.dff = (self.F-self.f0s[:,None])/self.f0s[:,None]
 
             # low pass filter data
             self.F_filtered = self.low_pass_filter(self.dff)
@@ -1099,7 +1108,7 @@ class Calcium():
                       }
                                  )
 
-    def save_sample_traces(self):
+    def save_sample_traces(self, spacing = 10, scale = 15):
 
         try:
             os.mkdir(os.path.join(self.data_dir,'figures'))
@@ -1115,8 +1124,8 @@ class Calcium():
 
         #
         ctr = 0
-        spacing = 10
-        scale=15
+        #spacing = self.spacing
+        #scale = self.scale
         for cell_id in idx:
             yy = np.array([.5,.5])*scale+ctr*spacing
             #print (yy)
