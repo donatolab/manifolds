@@ -738,7 +738,7 @@ class Calcium():
         else:
             self.binarize_fluorescence()
 
-    def get_footprint_contour(self, cell_id, cell_boundary='convex_hull'):
+    def get_footprint_contour(self, cell_id, cell_boundary='concave_hull'):
         points = np.vstack((self.stat[cell_id]['xpix'],
                             self.stat[cell_id]['ypix'])).T
 
@@ -1628,19 +1628,30 @@ class Calcium():
             percent1 = row['percent_cell1']
             percent2 = row['percent_cell2']
 
-            if cell1 < cell2:
-                corr = self.corr_array[cell1, cell2, 0]
+            if self.deduplication_use_correlations:
+
+                if cell1 < cell2:
+                    corr = self.corr_array[cell1, cell2, 0]
+                else:
+                    corr = self.corr_array[cell2, cell1, 0]
             else:
-                corr = self.corr_array[cell2, cell1, 0]
+                corr = 0
 
             dist_corr_matrix.append([cell1, cell2, corr, max(percent1, percent2)])
 
         dist_corr_matrix = np.vstack(dist_corr_matrix)
 
         #####################################################
+        # check max overlap
         idx1 = np.where(dist_corr_matrix[:, 3] >= self.corr_max_percent_overlap)[0]
-        idx2 = np.where(dist_corr_matrix[idx1, 2] >= self.corr_threshold)[0]   # note these are zscore thresholds for zscore method
-        idx3 = idx1[idx2]
+        
+        # skipping correlations is not a good idea
+        #   but is a requirement for computing deduplications when correlations data cannot be computed first
+        if self.deduplication_use_correlations:
+            idx2 = np.where(dist_corr_matrix[idx1, 2] >= self.corr_threshold)[0]   # note these are zscore thresholds for zscore method
+            idx3 = idx1[idx2]
+        else:
+            idx3 = idx1
 
         #
         self.candidate_neurons = dist_corr_matrix[idx3][:, :2]
@@ -1690,28 +1701,28 @@ class Calcium():
         
         
         # delete multi node networks
-        
-        from time import sleep
-
-        a = nx.connected_components(self.G)
-        removed_cells = []
-        tot, a = it_count(a)
-        #with tqdm(total=tot) as pbar:
-        #    ctr=0
-        for nn in a:
-            if self.corr_delete_method=='lowest_snr':
-                good_ids, removed_ids = del_lowest_snr(nn, self)
-            elif self.corr_delete_method=='highest_connected':
-                good_ids, removed_ids = del_highest_connected_nodes(nn, self)
+                
+        #
+        if self.corr_delete_method=='highest_connected_no_corr':
+            connected_cells, removed_cells = del_highest_connected_nodes_without_corr(self.G)
+                # so we select each subgraph and run a method on it;
+        else:
+            a = nx.connected_components(self.G)
+            tot, a = it_count(a)
+            connected_cells = []
+            for nn in a:
+                if self.corr_delete_method=='lowest_snr':
+                    good_ids, removed_ids = del_lowest_snr(nn, self)
+                elif self.corr_delete_method=='highest_connected':
+                    good_ids, removed_ids = del_highest_connected_nodes(nn, self)
+                #
+                removed_cells.append(removed_ids)
 
             #
-            removed_cells.append(removed_ids)
-
-        #
-        if len(removed_cells)>0:
-            removed_cells = np.hstack(removed_cells)
-        else:
-            removed_cells = []
+            if len(removed_cells)>0:
+                removed_cells = np.hstack(removed_cells)
+            else:
+                removed_cells = []
             
         # 
         print ("Removed cells: ", len(removed_cells))
@@ -1720,6 +1731,8 @@ class Calcium():
 
         #
         self.clean_cell_ids = clean_cells
+        self.removed_cell_ids = removed_cells
+        self.connected_cell_ids = connected_cells
 
         return self.clean_cell_ids
 
@@ -1766,6 +1779,51 @@ class Calcium():
 
         return  rasters, rasters_DFF
     
+    def make_correlation_dirs(self):
+
+        # select moving
+        text = 'all_states'
+        if self.subselect_moving_only and wheel_flag:
+            # add moving flag to filenames
+            text = 'moving'
+
+        elif self.subselect_quiescent_only and wheel_flag:
+            # add moving flag to filenames
+            text = 'quiescent'
+
+
+        # make sure the data dir is correct
+        if self.shuffle_data:
+            data_dir = os.path.join(self.data_dir,'correlations_shuffled')
+        else:
+            data_dir = os.path.join(self.data_dir,'correlations')
+        self.make_dir(data_dir)
+        
+        # next add the behavioral state to the filename
+        data_dir = os.path.join(data_dir, text)
+        self.make_dir(data_dir)
+
+        # use the method to make anotehr dir
+        if self.zscore:
+            data_dir = os.path.join(data_dir,'zscore')
+        else:
+            data_dir = os.path.join(data_dir,'threshold')
+        self.make_dir(data_dir)
+
+        #
+        data_dir = os.path.join(data_dir, 'correlations')
+        self.make_dir(data_dir)
+
+        #
+        self.corr_dir = data_dir
+
+    def make_dir(self,data_dir):
+
+        # check if dir exists or make it
+        if os.path.exists(data_dir)==False:
+            os.mkdir(data_dir)
+
+
     #
     def compute_correlations(self):
 
@@ -1827,30 +1885,14 @@ class Calcium():
             # add moving flag to filenames
             text = 'quiescent'
 
-        # make sure the data dir is correct
-        if self.shuffle_data:
-            data_dir = os.path.join(self.data_dir,'correlations_shuffled')
-        else:
-            data_dir = os.path.join(self.data_dir,'correlations')
-
         
-        # check if dir exists or make it
-        if os.path.exists(data_dir)==False:
-            os.mkdir(data_dir)
-        
-        # next add the behavioral state to the filename
-        data_dir = os.path.join(data_dir, text)
-
-        # check if dir exists or make it
-        if os.path.exists(data_dir)==False:
-            os.mkdir(data_dir)
 
         # select only good ids 
         #rasters = rasters[self.clean_cell_ids]
         #rasters_DFF = rasters_DFF[self.clean_cell_ids]
 
         # self.corrs = compute_correlations(rasters, self)
-        self.corrs = compute_correlations_parallel(data_dir,
+        self.corrs = compute_correlations_parallel(self.corr_dir,
                                                     rasters,
                                                     rasters_DFF,
                                                     self.n_cores,
@@ -1933,7 +1975,8 @@ class Calcium():
             os.environ['OMP_NUM_THREADS']= '1'
 
             # first need to reconstruct the correlation array depending on the method used
-            self.load_correlation_array()
+            if self.deduplication_use_correlations:
+                self.load_correlation_array()
 
             # finds distances between cell centres
             self.dists, self.dists_upper = find_inter_cell_distance(self.footprints)
@@ -1953,11 +1996,76 @@ class Calcium():
             # uses the graph to find the best neuron in each group
             self.clean_cell_ids  = self.delete_duplicate_cells()
 
+            # actually plot all the graphs for the removed and kept cells
+            if self.corr_delete_method=='highest_connected_no_corr':
+                self.plot_deduplication_graphs()
+
             # save clean cell ids:
             np.save(fname_cleanids, self.clean_cell_ids)
         
         else:
             self.clean_cell_ids = np.load(fname_cleanids)
+
+    def plot_deduplication_graphs(self):
+
+        # here we generate a contour plot of the removed_cell_ids and connected_cell_ids
+        
+        # plot contours
+        # print length of self contours
+        print('number of contours: ' + str(len(self.contours)))
+
+        # plot contours using ids of removed cells
+        plt.figure(figsize=(10,10))
+        
+        for k in range(len(self.removed_cell_ids)):
+            temp = self.contours[self.removed_cell_ids[k]]
+
+            # select a color at random for line plots
+            color = np.random.rand(3,)
+                    
+            if k==0:
+                plt.plot(temp[:,0], temp[:,1], '--',
+                        c=color, linewidth=2,
+                        label='removed cells')
+            else:
+                plt.plot(temp[:,0], temp[:,1], '--',
+                        c=color, linewidth=2)
+                
+
+
+        # # plot contours of connnected cells
+        # for k in range(len(self.connected_cell_ids)):
+            cell_ids = self.connected_cell_ids[k]
+            #print ("cell_ids: ", cell_ids)
+            
+            for ctr,cell_id in enumerate(cell_ids):
+                temp = self.contours[cell_id]
+
+                if k==0:
+                    plt.plot(temp[:,0], temp[:,1], 
+                            c=color, linewidth=2,
+                            label='connected cells')
+                else:
+                    plt.plot(temp[:,0], temp[:,1], 
+                        c=color, linewidth=2,
+                        #label='connected cells'
+                        )
+            #else:
+            #    plt.plot(temp[:,0], temp[:,1], 
+            #            c='black', linewidth=2)
+            
+        plt.xlim([0,512])
+        plt.ylim([0,512])
+        plt.legend()
+
+        fname_out = os.path.join(self.data_dir,
+                                 'figures',
+                                    'deduplication.png')
+        plt.savefig(fname_out, dpi=300)
+
+        plt.show()
+
+
 
     #
     def load_good_cell_ids(self):
@@ -2001,6 +2109,73 @@ def get_correlations(ids, c):
     corrs = np.array(corrs)
 
     return corrs
+
+
+def del_highest_connected_nodes_without_corr(G):
+
+    connected_components = nx.connected_components(G)
+    #print (" # of connected components: ", len(connected_components))
+
+    # loop over all connected components
+    removed_ids = []
+    connected_cell_ids = []
+    try:
+        while True:
+            component = next(connected_components)
+
+            # Get the edges of the chosen component
+            component_edges = G.subgraph(component).edges()
+            component_list = list(component_edges)
+            #print ("component list: ", component_list)
+
+            # Note this function is a bit complicated because we generally want to remove the highest valued
+            #   cell id; this is because suite2p and possible other packages rank cells by quality
+            #   with the lowest value being the best cell
+            while len(component_list) > 0:
+            
+                # flatten the list
+                temp = [item for sublist in component_list for item in sublist]
+                #print(temp)
+                # find the value of the common element in temp
+                #  if there are multiple with the same count, take the higher value numberone
+
+                most_common_elements, counts = np.unique(temp, return_counts=True)
+                #print ("most common elements: ", most_common_elements)
+                #print ("counts: ", counts)
+
+                # iget the max count from counts
+                max_count = np.max(counts)
+                # check which elements have this count
+                max_count_elements = most_common_elements[counts==max_count]
+                #print ("max count elements: ", max_count_elements)
+
+                # if there is more than one element with the max count, take the highest value one
+                if len(max_count_elements)>1:
+                    common_element = np.max(max_count_elements)
+                else:
+                    common_element = max_count_elements[0]
+               
+                removed_ids.append(common_element)
+                
+                # find all rows in component_list that contain the common element
+                cons_ids = []
+                for k in range(len(component_list)):    
+                    if common_element in component_list[k]:
+                        # delete the k'th component of the list
+                        temp = component_list[k]
+                        for p in temp:
+                            if p!=common_element:
+                                cons_ids.append(p)
+                connected_cell_ids.append(cons_ids)
+                component_list = [x for x in component_list if common_element not in x]
+            
+            #print ("removed_ids: ", removed_ids)
+            #print ("connected_cell_ids: ", connected_cell_ids)
+            #print ('')
+    except:
+        pass
+    
+    return connected_cell_ids, removed_ids
 
 
 def del_highest_connected_nodes(nn, c):
@@ -2148,6 +2323,47 @@ def del_lowest_snr(nn, c):
     good_cells = ids
     return good_cells, removed_cells
 
+
+
+def del_lowest_snr_without_correlation(nn, c):
+
+    '''
+        input
+        nn
+        c.corr_threshold
+        c.F_filtered
+
+
+    :param nn:
+    :param c:
+    :return:
+    '''
+    # get correlations for all cells in group
+    ids = np.array(list(nn))
+    #corrs = get_correlations(ids, c)
+    # print("ids: ", ids, " starting corrs: ", corrs)
+
+    # find lowest SNR neuron
+    removed_cells = []
+    while np.max(corrs) > c.corr_threshold:
+        snrs = []
+        for n in ids:
+            temp = signaltonoise(c.F_filtered[n])
+            snrs.append(temp)
+
+        # print ("ids: ", ids, "  snrs: ", snrs)
+        idx = np.argmin(snrs)
+        removed_cells.append(ids[idx])
+        ids = np.delete(ids, idx, 0)
+
+        if ids.shape[0] == 1:
+            break
+
+        corrs = get_correlations(ids, c)
+    # print ("ids: ", ids, "  corrs: ", corrs)
+
+    good_cells = ids
+    return good_cells, removed_cells
 
 
 def array_row_intersection(a, b):
@@ -2611,7 +2827,7 @@ def generate_cell_overlaps(c,data_dir):
                              'cell_overlaps.pkl'
                              )
 
-    if os.path.exists(fname_out) == False or c.recompute_deduplication:
+    if os.path.exists(fname_out) == False or c.recompute_overlap:
         
         print ("... computing cell overlaps ...")
         
