@@ -144,7 +144,9 @@ class Calcium():
         #
         self.recompute_binarization = False
 
-        #
+        # this method uses [ca] distribution skewness to more aggressively increase thrshold
+        #   it's important for inscopix data
+        self.moment_flag = False
 
     #
     def load_calcium(self):
@@ -872,8 +874,10 @@ class Calcium():
             temp = traces[k].copy()
 
             # find threshold crossings standard deviation based
+            thresh_local = self.thresholds[k]
+
             #print ("using threshold: ", min_thresh_std, "val_scale: ", val)
-            idx1 = np.where(temp>=self.thresholds[k])[0]  # may want to use absolute threshold here!!!
+            idx1 = np.where(temp>=thresh_local)[0]  # may want to use absolute threshold here!!!
 
             #
             temp = temp*0
@@ -906,6 +910,39 @@ class Calcium():
             #     #print (temp.shape, traces_bin.shape)
 
         return traces_bin
+
+    def find_threshold_by_moment(self):
+
+        #
+        self.moment_values = np.ones(self.F_detrended.shape[0])
+        for k in range(self.F_detrended.shape[0]):
+            self.moment_values[k] = temp = scipy.stats.moment(self.F_detrended[k], moment=self.moment)
+            
+            #
+            if self.moment_values[k] >= self.moment_threshold:
+                self.thresholds[k] = self.moment_scaling
+
+        #
+        try:
+            os.mkdir(os.path.join(self.data_dir,'figures'))
+        except:
+            pass
+        fname_out = os.path.join(self.data_dir, 
+                                 'figures', 
+                                 "moment_distributions.png")
+        # plot the distribution of moments
+        plt.figure(figsize=(10,10))
+        temp = np.histogram(self.moment_values, bins=np.arange(0,0.1,0.001))
+        plt.plot(temp[1][:-1], temp[0], label='Moment distribution')
+        
+        # plot moment thrshold as a vertical line
+        plt.axvline(self.moment_threshold, color='r',
+                    label='Threshold for bad cells (> we apply moment_scaling parameter)')
+        plt.legend()
+
+        #
+        plt.savefig(fname_out)        
+        plt.close()
 
     #
     def binarize_fluorescence(self):
@@ -943,6 +980,7 @@ class Calcium():
             try:
                 if self.inscopix_flag:
                     self.dff = self.F
+                    self.dff = self.F-self.f0s[:,None]
             except:
                 self.dff = (self.F-self.f0s[:,None])/self.f0s[:,None]
 
@@ -971,16 +1009,31 @@ class Calcium():
             #
 
             #
-            if True:
-                self.thresholds = parmap.map(find_threshold_by_gaussian_fit_parallel,
-                                             self.F_detrended,
-                                             self.percentile_threshold,
-                                             self.dff_min,
-                                             pm_processes = 16,
-                                             pm_pbar=True)
+            ll = []
+            for k in range(self.F_detrended.shape[0]):
+                ll.append([self.F_detrended[k],k])
+                #print (k,len(ll))
 
+            #
+            if self.parallel_flag:
+                self.thresholds = parmap.map(find_threshold_by_gaussian_fit_parallel,
+                                            ll,
+                                            self.percentile_threshold,
+                                            self.dff_min,
+                                            self.maximum_std_of_signal,
+                                            pm_processes = 16,
+                                            pm_pbar=True)
             else:
-                self.thresholds = find_threshold_by_gaussian_fit(self.F_detrended, self.percentile_threshold)
+                self.thresholds = []
+                for l in tqdm(ll):
+                    self.thresholds.append(find_threshold_by_gaussian_fit_parallel(
+                                        l,
+                                        self.percentile_threshold,
+                                        self.dff_min))
+            
+            # compute moments for inscopix data especially needed
+            if self.moment_flag:
+                self.find_threshold_by_moment()
 
             #
             self.F_onphase_bin = self.binarize_onphase2(self.F_detrended,
@@ -2228,18 +2281,23 @@ def del_highest_connected_nodes(nn, c):
     return good_cells, removed_cells
 
 
-def find_threshold_by_gaussian_fit_parallel(F_detrended,
+def find_threshold_by_gaussian_fit_parallel(ll,
                                             percentile_threshold,
-                                            snr_min):
+                                            snr_min,
+                                            maximum_sigma=100,
+                                            ):
 
     ''' Function fits a gaussian to the left (lower) part of the [ca] value distrbition centred on the mode
         it then sets the thrshold based on the
 
     '''
 
+    cell_id = ll[1]
+    F_detrended = ll[0]
+
     # OPTION 1: MEAN MIRRORIING
     try:
-        y = np.histogram(F_detrended, bins=np.arange(-5, 5, 0.001))
+        y = np.histogram(F_detrended, bins=np.arange(-25, 25, 0.001))
         y_mode = y[1][np.argmax(y[0])]
 
         idx = np.where(F_detrended <= y_mode)[0]
@@ -2254,7 +2312,7 @@ def find_threshold_by_gaussian_fit_parallel(F_detrended,
         sigma = norm.stdev
 
         #
-        x = np.arange(-10, 10, 0.001)
+        x = np.arange(-25, 25, 0.001)
         y_fit = stats.norm.pdf(x, mu, sigma)
         y_fit = y_fit / np.max(y_fit)
 
@@ -2269,6 +2327,10 @@ def find_threshold_by_gaussian_fit_parallel(F_detrended,
         #
         thresh = x[idx[0]]
 
+        if sigma>maximum_sigma:
+            thresh = 1
+
+
     except:
         print ("error data corrupt: data: ", F_detrended)
         thresh = 0
@@ -2279,7 +2341,6 @@ def find_threshold_by_gaussian_fit_parallel(F_detrended,
 
     #
     thresh_max = max(thresh, snr_min)
-    #print ("threshold: ", thresh, "snr min: ", snr_min)
 
     return thresh_max
 #
