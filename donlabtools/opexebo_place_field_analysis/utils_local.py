@@ -1525,20 +1525,20 @@ def compute_all_place_fields_parallel(n_tests,
     #
     if parallel:
         parmap.map(check_cell_id_field,
-               cell_ids,
-               root_dir,
-               upphases,
-               filtered_Fs,
-               locs,
-               occ_map,
-               arena_size,
-               sigma,
-               circular_shuffle,
-               n_tests,
-               x_edges,
-               y_edges,
-               pm_pbar = True,
-               )
+                    cell_ids,
+                    root_dir,
+                    upphases,
+                    filtered_Fs,
+                    locs,
+                    occ_map,
+                    arena_size,
+                    sigma,
+                    circular_shuffle,
+                    n_tests,
+                    x_edges,
+                    y_edges,
+                    pm_pbar = True,
+                    )
     else:
         for cell_id in cell_ids:
             check_cell_id_field(cell_id,
@@ -2035,8 +2035,7 @@ def return_cells(root_dir, animal_id, session_id):
 
     return cells, occ_map
 
-
-
+#
 def load_cell(root_dir,
               cell_id):
     try:
@@ -2047,7 +2046,109 @@ def load_cell(root_dir,
 
     return cell.item()
 
+#
+def find_redundant_place_fields_multi_session(root_dir, 
+                                            animal_id, 
+                                            session_id,
+                                            std_threshold,
+                                            color):
+                
+    #   
+    cells, occ_map = return_cells(root_dir,
+                                  animal_id,
+                                  session_id)
 
+    #
+    ctr = 0
+
+    #
+    # make a background map:
+    empty_map = np.zeros((occ_map.shape[0], occ_map.shape[1]), 'float32')
+    for cell in cells:
+        if cell["spatial_info_zscores"][0] < std_threshold:
+            continue
+        ctr += 1
+
+        #
+        fields_map_all = cell['fields_map_all'][0]
+        fields_map_all[fields_map_all>0]=1
+
+        #
+        empty_map+=fields_map_all
+
+  
+    # make a histogram of the values in empty map
+    vals = empty_map.flatten()
+    vals = vals[vals>0]
+    
+    y = np.histogram(vals, bins=np.arange(0,50,1))
+    plt.plot(y[1][:-1], y[0], 
+              color=color,
+              label=session_id+ " #cells: "+str(ctr))
+    
+    plt.xlabel("# of fields (i.e place cells) per pixel (2.5cm bins)")
+    plt.legend()
+
+
+
+#
+def find_redundant_place_fields(root_dir, 
+                                animal_id, 
+                                session_id,
+                                std_threshold):
+    
+
+    #
+    #   
+    cells, occ_map = return_cells(root_dir,
+                                  animal_id,
+                                  session_id)
+
+    #
+    ctr = 0
+    # make a background map:
+    empty_map = np.zeros((occ_map.shape[0], occ_map.shape[1]), 'float32')
+    for cell in cells:
+        if cell["spatial_info_zscores"][0] < std_threshold:
+            continue
+        ctr += 1
+
+        #
+        fields_map_all = cell['fields_map_all'][0]
+
+        # make the map boolean
+        fields_map_all[fields_map_all>0]=1
+        
+
+        #
+        empty_map+=fields_map_all
+
+    #
+    plt.figure()
+    ax=plt.subplot(1,2,1)
+    plt.imshow(empty_map)
+    plt.xlim(0, empty_map.shape[0])
+    plt.ylim(0, empty_map.shape[1])
+
+    #   
+    ax=plt.subplot(1,2,2)
+
+    # make a histogram of the values in empty map
+    vals = empty_map.flatten()
+    vals = vals[vals>0]
+    
+    y = np.histogram(vals, bins=np.arange(0,20,1))
+    plt.bar(y[1][:-1], y[0], 
+                width=.9,
+             color='black')
+    plt.title("histogram of place field values")
+
+    #
+    plt.suptitle(animal_id + " " + session_id + " # place cells: " + str(ctr))
+    plt.show()
+
+
+#
 def plot_contours(root_dir,
                   animal_id,
                   session_id,
@@ -2081,6 +2182,7 @@ def plot_contours(root_dir,
                 plt.plot(contours[:, 0], contours[:, 1],
                          linewidth=3)
             except:
+                print ("... couldn't find conoutr: cell: ", cell)
                 pass
         #except:
         #    pass

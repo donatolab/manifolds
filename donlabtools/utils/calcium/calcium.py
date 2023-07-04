@@ -927,6 +927,8 @@ class Calcium():
             os.mkdir(os.path.join(self.data_dir,'figures'))
         except:
             pass
+
+        #
         fname_out = os.path.join(self.data_dir, 
                                  'figures', 
                                  "moment_distributions.png")
