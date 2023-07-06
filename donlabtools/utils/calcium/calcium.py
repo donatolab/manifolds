@@ -23,7 +23,10 @@ import sys
 module_path = os.path.abspath(os.path.join('..'))
 sys.path.append(module_path)
 
-from utils.wheel import wheel
+try:
+    from utils.wheel import wheel
+except:
+    from manifolds.donlabtools.utils.wheel import wheel
 #from utils.calcium import calcium
 #from utils.animal_database import animal_database
 from statistics import NormalDist#, mode
@@ -177,10 +180,10 @@ class Calcium():
         ########### RUN BINARIZATION STEP ##############
         ################################################
         # Load inscopix data
-        #fname = '/media/cat/4TB/donato/nathalie/binarization_tests/good/2021-10-22-15-41-49_video_sched_0.csv'
-        #self.fname_inscopix = fname
+        fname = '/media/cat/4TB/donato/nathalie/binarization_tests/good/2021-10-22-15-41-49_video_sched_0.csv'
+        self.fname_inscopix = fname
         #self.load_inscopix()
-        #self.inscopix_flag = True
+        #self.inscopix_flag = False
         #self.data_dir = os.path.split(fname)[0]
         
         # Set dynamic threshold for binarization using percentile of fluorescence fit to mode
@@ -191,7 +194,6 @@ class Calcium():
         self.use_upphase = True
         self.parallel_flag = True
         self.maximum_std_of_signal = 0.03
-        self.fname_inscopix = fname
         self.moment = 2
         self.moment_threshold = 0.01   # note this value of 0.01 generally works, but should look at the moment_distribution.png to make sure it's not too high or low
         self.moment_scaling = 0.5        # if "bad" cell above moment_throesld, moment-scaling is the DFF above which we 
