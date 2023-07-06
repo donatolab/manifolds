@@ -1030,6 +1030,8 @@ class Calcium():
             # abs is required sometimes for inscopix data that returns baseline fixed data
             self.f0s = np.abs(np.median(self.F, axis=1))
             try:
+                #FIXME: This will create an error if self.inscopix_flag is present and set to false
+                # , because no self.dff will be present
                 if self.inscopix_flag:
                     self.dff = self.F
                     self.dff = self.F-self.f0s[:,None]
