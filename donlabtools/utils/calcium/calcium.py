@@ -23,7 +23,10 @@ import sys
 module_path = os.path.abspath(os.path.join('..'))
 sys.path.append(module_path)
 
-from utils.wheel import wheel
+try:
+    from utils.wheel import wheel
+except:
+    from manifolds.donlabtools.utils.wheel import wheel
 #from utils.calcium import calcium
 #from utils.animal_database import animal_database
 from statistics import NormalDist#, mode
@@ -131,23 +134,70 @@ class Calcium():
         self.min_width_event_oasis = 2                              # <--- min width of the window in frame times
         self.min_event_amplitude = 1                           # oasis scaled spikes: float point scaling boolean events; minimum amplitude required (removes very small amplitude events)
 
-        # Fluorescence parameters
+        #
+        self.recompute_binarization = False
+        
+        ###############################################
+        ##### PARAMETERS FOR RUNNING BINARIZATION #####
+        ###############################################
+                # Fluorescence parameters
         self.min_thresh_std_onphase = 1.5         # onphase binarization step: min x std for binarization of Fluorescence events
         self.min_thresh_std_upphase = 1.5         # upphase binarization step: min x std for binarization of Fluorescence events
-        self.min_width_event_onphase = self.sample_rate//2
-        self.min_width_event_upphase = self.sample_rate//4
+        self.min_width_event_onphase = self.sample_rate//2 # set minimum withd of an onphase event; default: 0.5 seconds
+        self.min_width_event_upphase = self.sample_rate//4 # set minimum width of upphase event; default: 0.25 seconds
 
-        #
+        
+        ############# PARAMTERS TO TWEAK ##############
+        #     1. Cutoff for calling somthing a spike:
+        #        This is stored in: std_Fluorescence_onphase/uppohase: defaults: 1.5
+        #                                        higher -> less events; lower -> more events
+        #                                        start at default and increase if data is very noisy and getting too many noise-events
+        #c.min_thresh_std_onphase = 2.5      # set the minimum thrshold for onphase detection; defatul 2.5
+        #c.min_thresh_std_upphase = 2.5      # set the minimum thershold for uppohase detection; default: 2.5
+
+        #     2. Filter of [Ca] data which smooths the data significantly more and decreases number of binarzied events within a multi-second [Ca] event
+        #        This is stored in high_cutoff: default 0.5 to 1.0
+        #        The lower we set it the smoother our [Ca] traces and less "choppy" the binarized traces (but we loose some temporal precision)
+
         self.high_cutoff = 1
         self.low_cutoff = 0.005
         
-        #
-        self.recompute_binarization = False
+        #     3. Removing bleaching and drift artifacts using polynomial fits
+        #        This is stored in detrend_model_order
+        self.detrend_model_order = 1 # 1-3 polynomial fit
+        self.detrend_model_type = 'mode' # 'mode', 'polynomial'
 
+        #
+        self.mode_window = None #*30 # 120 seconds @ 30Hz
+        
         # this method uses [ca] distribution skewness to more aggressively increase thrshold
         #   it's important for inscopix data
         self.moment_flag = False
-
+        
+        # inscopix parameter
+        
+        ################################################
+        ########### RUN BINARIZATION STEP ##############
+        ################################################
+        # Load inscopix data
+        fname = '/media/cat/4TB/donato/nathalie/binarization_tests/good/2021-10-22-15-41-49_video_sched_0.csv'
+        self.fname_inscopix = fname
+        #self.load_inscopix()
+        #self.inscopix_flag = False
+        #self.data_dir = os.path.split(fname)[0]
+        
+        # Set dynamic threshold for binarization using percentile of fluorescence fit to mode
+        self.dff_min = 0.1                     # set the minimum dff value to be considered an event; required for weird negative dff values
+                                            #   that sometimes come out of inscopix data
+        self.show_plots = True
+        self.percentile_threshold = 0.99999
+        self.use_upphase = True
+        self.parallel_flag = True
+        self.maximum_std_of_signal = 0.03
+        self.moment = 2
+        self.moment_threshold = 0.01   # note this value of 0.01 generally works, but should look at the moment_distribution.png to make sure it's not too high or low
+        self.moment_scaling = 0.5        # if "bad" cell above moment_throesld, moment-scaling is the DFF above which we 
+                                    #    consider [ca] to be a spike 
     #
     def load_calcium(self):
 
@@ -980,6 +1030,8 @@ class Calcium():
             # abs is required sometimes for inscopix data that returns baseline fixed data
             self.f0s = np.abs(np.median(self.F, axis=1))
             try:
+                #FIXME: This will create an error if self.inscopix_flag is present and set to false
+                # , because no self.dff will be present
                 if self.inscopix_flag:
                     self.dff = self.F
                     self.dff = self.F-self.f0s[:,None]
