@@ -106,6 +106,9 @@ class Calcium():
 
     def __init__(self):
 
+
+        # SET MANY DEFAULTS
+
         #
         self.save_python = True
         self.save_matlab = False
@@ -174,16 +177,8 @@ class Calcium():
         #   it's important for inscopix data
         self.moment_flag = False
         
-        # inscopix parameter
-        
-        ################################################
-        ########### RUN BINARIZATION STEP ##############
-        ################################################
-        # Load inscopix data
-        fname = '/media/cat/4TB/donato/nathalie/binarization_tests/good/2021-10-22-15-41-49_video_sched_0.csv'
-        self.fname_inscopix = fname
-        #self.load_inscopix()
-        #self.inscopix_flag = False
+        # inscopix should be set to OFF by default as it does extra processing for inscopix 1p data    
+        self.inscopix_flag = False
         #self.data_dir = os.path.split(fname)[0]
         
         # Set dynamic threshold for binarization using percentile of fluorescence fit to mode
