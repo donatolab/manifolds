@@ -6,15 +6,17 @@ import numpy as np
 from tqdm import tqdm, trange
 from scipy import stats
 import matplotlib.pyplot as plt
+import pickle
 
+#
 class Treadmill():
 
     def __init__(self,
-                 experiment_id,
-                 session_ids,
-                 up_phase,
-                 reorder,
-                 session_names
+                 experiment_id=None,
+                 session_ids=None,
+                 up_phase=None,
+                 reorder=None,
+                 session_names=None
                  ):
 
         self.experiment_id = experiment_id
@@ -23,6 +25,115 @@ class Treadmill():
         self.reorder = reorder
         self.session_names = session_names
 
+    #
+    def load_renan_data(self):
+        
+        #
+        with open (self.fname_ca,'rb') as f:
+            self.F_upphase_bin = pickle.load(f)   
+
+        # same but for a position file:
+        with open (self.fname_pos,'rb') as f:
+            self.positions = pickle.load(f).squeeze()
+
+        print (self.F_upphase_bin.shape)
+        print (self.positions.shape)
+
+
+    #
+    def show_cell_session_averages_renan(self):
+
+        #
+        ca = self.F_upphase_bin
+        print("raw ca: ", ca.shape)
+
+        #
+        len_seg_cm = 1  # discretize belt position 
+        #triage_value = 0.25  # remove xx% most outlier states
+
+        # get length of track by finding max of pos
+        max_pos = int(np.max(self.positions))+1
+
+        #
+        cell_ids = np.arange(ca.shape[0])
+        #ca_array = np.zeros((cell_ids.shape[0], max_pos))
+        img = []
+        ctrc = 0
+        bad_cells = 0
+        for cell_id in tqdm(cell_ids):
+            arr = np.zeros(max_pos)
+
+            #
+            f0 = np.max(ca[cell_id])
+            if f0 != 0:
+
+                #
+                for k in range(self.positions.shape[0] - 1):
+
+                    # location
+                    loc = int(self.positions[k])
+
+                    #
+                    ca_val = ca[cell_id, k]
+                    
+                    # temp = temp - f0
+                    arr[loc] = arr[loc] + ca_val
+                    #ca_array[ctrc, k] = temp
+
+                # smoof
+                width = self.smoothing_window
+                arr = np.convolve(arr, np.ones(width) / width, mode='same')
+
+                #
+                if arr.sum() > 0:
+                    # normalize
+                    arr = (arr - np.min(arr)) / (np.max(arr) - np.min(arr))
+            else:
+                bad_cells+=1
+
+            ctrc += 1
+
+            #
+            img.append(arr)
+
+        #
+        print ("# of bad cells: "   , bad_cells)
+
+        #
+        img = np.array(img)
+
+        #
+        # 
+        if self.reorder:
+            argmaxs = np.argmax(img, axis=1)
+            idx_main = np.argsort(argmaxs)[::-1]
+            img = img[idx_main] 
+
+        #
+        plt.figure()
+        plt.imshow(img,
+                    aspect='auto',
+                    interpolation='none'
+                    )
+
+        #
+        #plt.ylabel("Cell id (Ordered by ~peak")
+        #plt.xlabel("Belt " + str(segment_order[session_id]) + " location (cm)")
+        #plt.title(os.path.split(os.path.split(fname_ca)[0])[0])
+        #plt.suptitle("Segment: " + segment_order[session_id])
+        plt.show(block=False)
+        plt.ylabel('cell id')
+        plt.xlabel('position (cm)')
+
+        print("DONE...")
+
+        #self.ca_array = ca_array
+
+        #self.pos_tracks = pos_tracks
+
+        #self.idx_tracks = idx_tracks
+
+    #
     def show_cell_session_averages(self):
 
         # load default names
@@ -228,6 +339,94 @@ class Treadmill():
                    aspect='auto')
         plt.show()
 
+    #
+    def compute_rate_maps_renan(self):
+
+        ''' This only computes the average activity at eac
+
+        :param min_vel:
+        :return:
+        '''
+
+        #
+        vel = self.positions[1:] - self.positions[:-1]
+        idx = np.where(vel < 0)[0] #not clear why we have negative velocity, but I guess moouse can go backwards
+        vel[idx] = 0
+        self.vel = vel * self.frame_rate
+
+        # find moving
+        self.ca = []
+        self.pos = []
+        self.rate_maps_non_norm = []
+        self.n_frames_in_loc = []
+        self.rate_maps = []
+
+        #
+        #print (len(self.vel), len(self.vels[0]))
+        idx = np.where(self.vel > self.min_vel)[0]
+        print('# moving times: ', idx.shape)
+
+        #
+        pos = np.int32(self.positions[idx])
+
+        # grab galcium from the moving times
+        self.ca = self.F_upphase_bin[:, idx]
+
+        # count the occupancy of each position
+        max_loc = int(np.max(pos))+1
+        n_frames_in_loc = np.zeros(max_loc)
+        ave = np.zeros((self.ca.shape[0], max_loc))
+
+        # do time binned averages by adding activity at eveyr position
+        for k in range(pos.shape[0]):
+            ave[:, pos[k]] = ave[:, pos[k]] + self.ca[:, k]
+            n_frames_in_loc[pos[k]] += 1
+
+        # smooth the
+        width = 5
+        if False:
+            n_frames_in_loc = np.convolve(n_frames_in_loc, np.ones(width) / width, mode='same')
+
+        #
+        self.n_frames_in_loc = n_frames_in_loc
+        self.rate_maps_non_norm = ave.copy()
+
+        #
+        ave = ave / n_frames_in_loc
+
+        #
+        for k in range(ave.shape[0]):
+            max_ = np.nanmax(ave[k])
+            min_ = np.nanmin(ave[k])
+            if max_ == min_:
+                pass
+            else:
+                ave[k] = (ave[k] - min_) / (max_ - min_)
+
+        #
+        self.rate_maps = ave
+
+        #
+
+        ##############################
+        ##############################
+        ##############################
+        plt.figure()
+        # reorder cells
+        if self.reorder:
+            idx = np.argmax(ave, axis=1)
+            idx2 = np.argsort(idx)
+            ave = ave[idx2]
+
+        plt.imshow(ave,
+                    aspect='auto')
+        #plt.title(self.session_names[session_id])
+        plt.xlabel("Track (cm)")
+        plt.ylabel("Cell #")
+
+        plt.show(block=False)
+
+    #
     def compute_rate_maps(self):
 
         ''' This only computes the average activity at eac
@@ -311,6 +510,44 @@ class Treadmill():
 
             plt.show(block=False)
 
+
+    #
+    def compute_si_renan(self):
+
+
+        #
+        self.si = np.zeros((self.rate_maps_non_norm[0].shape[0]))
+        self.si_rate = np.zeros((self.rate_maps_non_norm[0].shape[0]))
+        self.zscore = np.zeros((self.rate_maps_non_norm[0].shape[0]))
+
+        #
+        time_map = self.positions
+        print("time_map :", time_map.shape)
+        for c in trange(self.rate_maps_non_norm.shape[0]):
+
+            # these aren't exactly rate maps... they are the raw calcium traces
+            rate_map = self.ca[c]
+
+            #
+            inf_rate, inf_content = get_si2(rate_map, time_map)
+
+            #
+            self.si_rate[c] = inf_rate
+            self.si[c] = inf_content
+
+            # get zscore:
+            si_shuffle = []
+            for k in range(self.n_tests):
+                time_map2 = np.roll(time_map, np.random.choice(np.arange(time_map.shape[0]),1))
+                inf_rate, _ = get_si(rate_map, time_map2)
+                si_shuffle.append(inf_rate)
+
+            from scipy import stats
+            stack = np.hstack([self.si_rate[c], si_shuffle])
+            self.zscore[c] = stats.zscore(stack)[0]
+            #print (zz[0])
+
+    #
     def compute_si(self):
 
 
@@ -901,7 +1138,7 @@ def load_tracks2(fname_tracks, bin_width):
             pos = file['trdEval']['position_atframe'][()].squeeze()
 
             n_timesteps = pos.shape[0]
-            # print ("# of time steps: ", pos.shape)
+            print (fname_track, "# of time steps: ", pos.shape)
 
         # bin speed for some # of bins
         # bin_width = 1
