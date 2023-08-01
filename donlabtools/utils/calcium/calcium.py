@@ -3,6 +3,8 @@ import os
 from tqdm import trange, tqdm
 from scipy.signal import butter, lfilter, freqz, filtfilt
 import matplotlib.pyplot as plt
+import yaml
+
 # from tsnecuda import TSNE
 # import umap
 from sklearn.decomposition import PCA
@@ -104,18 +106,15 @@ def run_UMAP(data,
 #
 class Calcium():
 
-    def __init__(self):
+    def __init__(self,data_dir, animal_id):
 
 
         # SET MANY DEFAULTS
+        self.data_dir = data_dir
+        self.root_dir = data_dir
+        self.animal_id = animal_id
 
         #
-        self.save_python = True
-        self.save_matlab = False
-
-        self.sample_rate = 30
-        #print ("Sample rate: ", self.sample_rate, "hz")
-
         self.verbose = False
 
         #
@@ -131,6 +130,65 @@ class Calcium():
         # check if some of the cells have 0-std in which case they should be removed
         self.check_zero_cells = True
 
+        # set paramatrs
+        self.set_default_parameters()
+
+        #
+        self.load_yaml_file()
+        
+    #
+    def load_yaml_file(self):
+
+        # load yaml file
+        yaml_file = os.path.join(self.root_dir,
+                                self.animal_id,
+                                self.animal_id + '.yaml')
+
+        if os.path.exists(yaml_file)==False:
+            print ("ERROR: yaml file not found: ", yaml_file)
+            print ("   please make yaml file to start")
+            print ("   see the local file DON-014451.yaml for an example")
+            print ("   (you only need to insert session_names for now)")
+
+            self.yaml_file_exists = False
+            return
+        else:
+            self.yaml_file_exists=True
+
+        #
+        with open(yaml_file) as file:
+            #
+            data = yaml.load(file, Loader=yaml.FullLoader)
+            self.session_names = data['session_names']
+
+        #
+        print (" Sessions for animal: ", self.animal_id)
+        for ctr,session_name in enumerate(self.session_names):
+            print ("("+str(ctr)+")  ", session_name)
+        print ("(a)   All sessions")
+        
+
+        # select a session
+        print ("Please select a session to process:")
+        user_input = input()
+        if user_input=='a':
+            print ("Processing all sessions")
+        else:
+            print(f"Processing sesssion: {self.session_names[int(user_input)]}")
+        print ("")
+
+        #
+        self.session_id_toprocess = user_input
+
+
+    def set_default_parameters(self):
+        
+        #
+        self.save_python = True
+        self.save_matlab = False
+
+        self.sample_rate = 30
+
         # Oasis/spike parameters
         self.oasis_thresh_prefilter = 15                       # min oasis spike value that survives
         self.min_thresh_std_oasis = .1                          # upphase binarizatino step: min std for binarization of smoothed oasis curves
@@ -140,10 +198,12 @@ class Calcium():
         #
         self.recompute_binarization = False
         
+        # NOTE many of these are overwritten in the main python notebook script
+
         ###############################################
         ##### PARAMETERS FOR RUNNING BINARIZATION #####
         ###############################################
-                # Fluorescence parameters
+        # Fluorescence parameters
         self.min_thresh_std_onphase = 1.5         # onphase binarization step: min x std for binarization of Fluorescence events
         self.min_thresh_std_upphase = 1.5         # upphase binarization step: min x std for binarization of Fluorescence events
         self.min_width_event_onphase = self.sample_rate//2 # set minimum withd of an onphase event; default: 0.5 seconds
@@ -170,6 +230,9 @@ class Calcium():
         self.detrend_model_order = 1 # 1-3 polynomial fit
         self.detrend_model_type = 'mode' # 'mode', 'polynomial'
 
+        # this was for Steffen's data
+        self.remove_ends = False
+
         #
         self.mode_window = None #*30 # 120 seconds @ 30Hz
         
@@ -189,10 +252,56 @@ class Calcium():
         self.use_upphase = True
         self.parallel_flag = True
         self.maximum_std_of_signal = 0.03
+
+        # these are paramters for inscopix which returns weird distributions
         self.moment = 2
         self.moment_threshold = 0.01   # note this value of 0.01 generally works, but should look at the moment_distribution.png to make sure it's not too high or low
         self.moment_scaling = 0.5        # if "bad" cell above moment_throesld, moment-scaling is the DFF above which we 
                                     #    consider [ca] to be a spike 
+
+        # 
+        self.detrend_filter_threshold = 0.001 # this filters the data with a very low pass filter pre model fitting
+
+        ###############################################
+        ##### PARAMETERS FOR RUNNING BINARIZATION #####
+        ###############################################
+        self.min_width_event_onphase = self.sample_rate//2 # set minimum withd of an onphase event; default: 0.5 seconds
+        self.min_width_event_upphase = self.sample_rate//4 # set minimum width of upphase event; default: 0.25 seconds
+
+        ############# PARAMTERS TO TWEAK ##############
+        #     1. Cutoff for calling somthing a spike:
+        #        This is stored in: std_Fluorescence_onphase/uppohase: defaults: 1.5
+        #                                        higher -> less events; lower -> more events
+        #                                        start at default and increase if data is very noisy and getting too many noise-events
+        #c.min_thresh_std_onphase = 2.5      # set the minimum thrshold for onphase detection; defatul 2.5
+        #c.min_thresh_std_upphase = 2.5      # set the minimum thershold for uppohase detection; default: 2.5
+
+        #     2. Filter of [Ca] data which smooths the data significantly more and decreases number of binarzied events within a multi-second [Ca] event
+        #        This is stored in high_cutoff: default 0.5 to 1.0
+        #        The lower we set it the smoother our [Ca] traces and less "choppy" the binarized traces (but we loose some temporal precision)
+        self.high_cutoff = 0.5              
+
+        #     3. Removing bleaching and drift artifacts using polynomial fits
+        #        This is stored in detrend_model_order
+        self.detrend_model_order = 1 # 1-3 polynomial fit
+        self.detrend_model_type = 'mode' # 'mode', 'polynomial'
+
+        #
+        self.mode_window = None #*30
+
+
+        #
+        self.min_width_event_onphase = 30
+        self.min_width_event_upphase = 10
+        self.recompute_binarization = True
+
+        self.show_plots =False
+        self.remove_ends = False                     # delete the first and last x seconds in case [ca] imaging had issues
+        self.detrend_filter_threshold = 0.001
+        self.mode_window = 30*30  # None: compute mode on entire time; Value: sliding window based - baseline detection # of frames to use to compute mode
+
+        
+
     #
     def load_calcium(self):
 
@@ -991,13 +1100,100 @@ class Calcium():
         plt.savefig(fname_out)        
         plt.close()
 
+
+    def binarize_data(self):
+
+        #
+        if self.yaml_file_exists==False:
+            return
+
+
+        # here we loop over all sessions
+        if self.session_id_toprocess=='a':
+            
+            for k in range(len(self.session_names)):
+                self.session_id = k
+                self.session_name = str(self.session_names[k])
+
+                self.binarize_fluorescence()
+                # generate standard randomized plots:
+                self.save_sample_traces()
+                self.show_rasters(True)
+        #
+        else:
+            self.session_name = self.session_names[int(self.session_id_toprocess)]
+            self.binarize_fluorescence()
+
+            # generate standard randomized plots:
+            self.save_sample_traces()
+            self.show_rasters(True)
+
+
+
     #
     def binarize_fluorescence(self):
 
+        print ("")
+        print ("BINARIZING: ", self.session_name)
+        #
+        self.data_dir = os.path.join(self.root_dir,
+                                     self.animal_id,
+                                     self.session_name,
+                                     'plane0')
         #
         fname_out = os.path.join(self.data_dir,
                                  'binarized_traces.npz'
                                  )
+
+        # load suite2p data
+        self.load_suite2p()                          
+
+
+        # ###############################################
+        # ##### PARAMETERS FOR RUNNING BINARIZATION #####
+        # ###############################################
+        # self.min_width_event_onphase = self.sample_rate//2 # set minimum withd of an onphase event; default: 0.5 seconds
+        # self.min_width_event_upphase = self.sample_rate//4 # set minimum width of upphase event; default: 0.25 seconds
+
+        # ############# PARAMTERS TO TWEAK ##############
+        # #     1. Cutoff for calling somthing a spike:
+        # #        This is stored in: std_Fluorescence_onphase/uppohase: defaults: 1.5
+        # #                                        higher -> less events; lower -> more events
+        # #                                        start at default and increase if data is very noisy and getting too many noise-events
+        # #c.min_thresh_std_onphase = 2.5      # set the minimum thrshold for onphase detection; defatul 2.5
+        # #c.min_thresh_std_upphase = 2.5      # set the minimum thershold for uppohase detection; default: 2.5
+
+        # #     2. Filter of [Ca] data which smooths the data significantly more and decreases number of binarzied events within a multi-second [Ca] event
+        # #        This is stored in high_cutoff: default 0.5 to 1.0
+        # #        The lower we set it the smoother our [Ca] traces and less "choppy" the binarized traces (but we loose some temporal precision)
+        # self.high_cutoff = 0.5              
+
+        # #     3. Removing bleaching and drift artifacts using polynomial fits
+        # #        This is stored in detrend_model_order
+        # self.detrend_model_order = 1 # 1-3 polynomial fit
+        # self.detrend_model_type = 'mode' # 'mode', 'polynomial'
+
+        # #
+        # self.mode_window = None #*30 # 120 seconds @ 30Hz 
+
+        # ################################################
+        # ########### RUN BINARIZATION STEP ##############
+        # ################################################
+        # # 
+        # # double check that we have set the STD thrshold at a reasonable level to catch biggest/highest SNR bursts
+        # self.parallel_flag = True
+        # self.use_upphase = True
+        # self.show_plots = False
+        # self.remove_ends = False                     # delete the first and last x seconds in case [ca] imaging had issues
+
+        # # how wide the window for computing physics model is; 
+        # self.mode_window = 30*30  # None: compute mode on entire time; Value: sliding window based - baseline detection # of frames to use to compute mode
+        # self.detrend_filter_threshold = 0.001 # this filters the data with a very low pass filter pre model fitting
+
+        # #
+        # self.min_width_event_onphase = 30
+        # self.min_width_event_upphase = 10
+
 
         #
         if os.path.exists(fname_out)==False or self.recompute_binarization:
@@ -1030,6 +1226,9 @@ class Calcium():
                 if self.inscopix_flag:
                     self.dff = self.F
                     self.dff = self.F-self.f0s[:,None]
+                else:
+                    self.dff = (self.F-self.f0s[:,None])/self.f0s[:,None]
+
             except:
                 self.dff = (self.F-self.f0s[:,None])/self.f0s[:,None]
 
@@ -2376,6 +2575,7 @@ def find_threshold_by_gaussian_fit_parallel(ll,
         #
         thresh = x[idx[0]]
 
+        # if the data has std too large, we increase the threshold sginicantly
         if sigma>maximum_sigma:
             thresh = 1
 
