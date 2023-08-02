@@ -106,13 +106,28 @@ def run_UMAP(data,
 #
 class Calcium():
 
-    def __init__(self,data_dir, animal_id):
+    def __init__(self, root_dir, animal_id, session_name=None, data_dir=None):
+        """
+        Initializes a Calcium object. 
+        An interface is presented to choose a session_name if the session_naem is not set initially.
+        If the data_dir is not specified the default is used: root_dir/animal_id/session_id/plane0
 
+        :param root_dir: The root directory where the data is stored.
+        :type root_dir: str
+        :param animal_id: The ID of the animal.
+        :type animal_id: str
+        :param session_name: The name of the session, defaults to None.
+        :type session_name: str, optional
+        :param data_dir: The directory where the data is stored, defaults to None.
+        :type data_dir: str, optional
+        """
 
         # SET MANY DEFAULTS
+        self.root_dir = root_dir
         self.data_dir = data_dir
-        self.root_dir = data_dir
+        #self.data_dir = os.path.join(root_dir, animal_id)
         self.animal_id = animal_id
+        self.session_name = session_name
 
         #
         self.verbose = False
@@ -134,10 +149,10 @@ class Calcium():
         self.set_default_parameters()
 
         #
-        self.load_yaml_file()
+        self.load_yaml_file(session_name)
         
     #
-    def load_yaml_file(self):
+    def load_yaml_file(self, session_name=None):
 
         # load yaml file
         yaml_file = os.path.join(self.root_dir,
@@ -161,22 +176,24 @@ class Calcium():
             data = yaml.load(file, Loader=yaml.FullLoader)
             self.session_names = data['session_names']
 
-        #
-        print (" Sessions for animal: ", self.animal_id)
-        for ctr,session_name in enumerate(self.session_names):
-            print ("("+str(ctr)+")  ", session_name)
-        print ("(a)   All sessions")
-        
+        if not session_name:
+            #
+            print (" Sessions for animal: ", self.animal_id)
+            for ctr,session_name in enumerate(self.session_names):
+                print ("("+str(ctr)+")  ", session_name)
+            print ("(a)   All sessions")
+            
 
-        # select a session
-        print ("Please select a session to process:")
-        user_input = input()
-        if user_input=='a':
-            print ("Processing all sessions")
+            # select a session
+            print ("Please select a session to process:")
+            user_input = input()
+            if user_input=='a':
+                print ("Processing all sessions")
+            else:
+                print(f"Processing sesssion: {self.session_names[int(user_input)]}")
+            print ("")
         else:
-            print(f"Processing sesssion: {self.session_names[int(user_input)]}")
-        print ("")
-
+            user_input = self.session_names.index(session_name)
         #
         self.session_id_toprocess = user_input
 
@@ -1136,15 +1153,16 @@ class Calcium():
         print ("")
         print ("BINARIZING: ", self.session_name)
         #
-        self.data_dir = os.path.join(self.root_dir,
-                                     self.animal_id,
-                                     self.session_name,
-                                     'plane0')
+        if not self.data_dir:
+            self.data_dir = os.path.join(self.root_dir,
+                                        self.animal_id,
+                                        self.session_name,
+                                        'plane0')
         #
         fname_out = os.path.join(self.data_dir,
                                  'binarized_traces.npz'
                                  )
-
+        #\\\\toucan-all.scicore.unibas.ch\\donafl00-calcium$\\Users\\Sergej\\Steffen_Experiments\\DON-002865\\20201104\\plane0\\F.npy'
         # load suite2p data
         self.load_suite2p()                          
 
