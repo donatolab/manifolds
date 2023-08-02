@@ -1162,7 +1162,6 @@ class Calcium():
         fname_out = os.path.join(self.data_dir,
                                  'binarized_traces.npz'
                                  )
-        #\\\\toucan-all.scicore.unibas.ch\\donafl00-calcium$\\Users\\Sergej\\Steffen_Experiments\\DON-002865\\20201104\\plane0\\F.npy'
         # load suite2p data
         self.load_suite2p()                          
 
