@@ -145,9 +145,6 @@ class Calcium():
         # check if some of the cells have 0-std in which case they should be removed
         self.check_zero_cells = True
 
-        # set paramatrs
-        self.set_default_parameters()
-
         #
         self.load_yaml_file(session_name)
         
@@ -197,8 +194,92 @@ class Calcium():
         #
         self.session_id_toprocess = user_input
 
+    #
+    def set_default_parameters_1p(self):
 
-    def set_default_parameters(self):
+
+        #
+        self.parallel_flag = True
+
+        # set flags to save matlab and python data
+        self.save_python = True         # save output as .npz file 
+        self.save_matlab = True         # save output as .mat file
+
+        ###############################################
+        ##### PARAMETERS FOR RUNNING BINARIZATION #####
+        ###############################################
+        self.sample_rate = 20
+
+        # Oasis/spike parameters - NOT USED HERE
+        self.oasis_thresh_prefilter = np.nan                       # min oasis spike value that survives
+        self.min_thresh_std_oasis = np.nan                          # upphase binarizatino step: min std for binarization of smoothed oasis curves
+        self.min_width_event_oasis = np.nan                              # <--- min width of the window in frame times
+        self.min_event_amplitude = np.nan                           # oasis scaled spikes: float point scaling boolean events; minimum amplitude required (removes very small amplitude events)
+        self.min_thresh_std_onphase = np.nan         # onphase binarization step: min x std for binarization of Fluorescence events
+        self.min_thresh_std_upphase = np.nan        # upphase binarization step: min x std for binarization of Fluorescence events
+ 
+
+        ############# PARAMTERS TO TWEAK ##############
+        #     1. Cutoff for calling somthing a spike:
+        #        This is stored in: std_Fluorescence_onphase/uppohase: defaults: 1.5
+        #                                        higher -> less events; lower -> more events
+        #                                        start at default and increase if data is very noisy and getting too many noise-events
+        #c.min_thresh_std_onphase = 2.5      # set the minimum thrshold for onphase detection; defatul 2.5
+        #c.min_thresh_std_upphase = 2.5      # set the minimum thershold for uppohase detection; default: 2.5
+
+        #     2. Filter of [Ca] data which smooths the data significantly more and decreases number of binarzied events within a multi-second [Ca] event
+        #        This is stored in high_cutoff: default 0.5 to 1.0
+        #        The lower we set it the smoother our [Ca] traces and less "choppy" the binarized traces (but we loose some temporal precision)
+        self.high_cutoff = 0.5              
+
+        #     3. Removing bleaching and drift artifacts using polynomial fits
+        #        This is stored in detrend_model_order
+        self.detrend_model_order = 1 # 1-3 polynomial fit
+        self.detrend_model_type = 'mode' # 'mode', 'polynomial'
+
+        #
+        self.high_cutoff = 1
+        self.low_cutoff = 0.005
+
+        #
+        self.mode_window = None #*30 # 120 seconds @ 30Hz 
+
+        ################################################
+        ########### RUN BINARIZATION STEP ##############
+        ################################################
+        # 
+        # double check that we have set the STD thrshold at a reasonable level to catch biggest/highest SNR bursts
+        self.show_plots = True
+
+        #
+        self.min_width_event_onphase = self.sample_rate   # the onphase needs to be at least 
+        self.min_width_event_upphase = self.sample_rate//3 # the upphase needs to be at least 1/3 of a second
+        self.recompute_binarization = True
+
+        # Set dynamic threshold for binarization using percentile of fluorescence fit to mode
+        self.dff_min = 0.1                     # set the minimum dff value to be considered an event; required for weird negative dff values
+                                            #   that sometimes come out of inscopix data
+        self.percentile_threshold = 0.99999
+        self.use_upphase = True
+
+        #
+        self.show_plots =False
+        self.remove_ends = False                     # delete the first and last x seconds in case [ca] imaging had issues
+        self.detrend_filter_threshold = 0.001        # this is a very low filter value that is applied to remove bleaching before computing mode
+        self.mode_window = 30*30  # None: compute mode on entire time; Value: sliding window based - baseline detection # of frames to use to compute mode
+
+        # for inscopix lower this value; general range is 0.03 to 0.01 
+        self.maximum_std_of_signal = 0.03
+
+        #
+        self.moment_flag = True
+        self.moment = 2
+        self.moment_threshold = 0.01   # note this value of 0.01 generally works, but should look at the moment_distribution.png to make sure it's not too high or low
+        self.moment_scaling = 0.5        # if "bad" cell above moment_throesld, moment-scaling is the DFF above which we 
+                                    #    consider [ca] to be a spike 
+
+
+    def set_default_parameters_2p(self):
         
         #
         self.save_python = True
@@ -433,7 +514,7 @@ class Calcium():
 
         return std_global
 
-
+    #
     def load_inscopix(self):
 
         from numpy import genfromtxt
@@ -447,10 +528,11 @@ class Calcium():
             print ("F times: ", self.F_times.shape)
 
         # scale F to 100 times smaller
-        self.F = self.F/100
-        
-        #self.std_global, _ = self.compute_std_global(self.F)
-            #print ("         mean std over all cells : ", self.std_global)
+        if self.inscopix_post_update:
+            print ("scaling [Ca] data by 1000")
+            self.F = self.F/1000
+        else:
+            self.F = self.F/100
         
 
     #
@@ -1013,10 +1095,36 @@ class Calcium():
         plt.title("Spike threshold: "+str(self.min_thresh_std_upphase)+
                   ", lowpass filter cutoff (hz): " +str(self.high_cutoff)+
                   ", detrend polynomial model order: "+str(self.detrend_model_order))
-        plt.suptitle(self.data_dir)
+        
+        plt.suptitle(self.root_dir+
+                     self.animal_id+
+                     str(self.session_name))
 
+        #################
         if save_image==True:
-            plt.savefig(os.path.join(self.data_dir,'figures','rasters.png'),dpi=300)
+
+#
+            try:
+                os.mkdir(os.path.join(self.root_dir,
+                                self.animal_id,
+                                str(self.session_name),
+                                'figures'))
+            except:
+                pass
+
+            #################################################
+            #################################################
+            #################################################
+            #
+            fname_out = os.path.join(self.root_dir,
+                                    self.animal_id, 
+                                    str(self.session_name),
+                                    'figures', 
+                                    "rasters.png")
+        
+            plt.savefig(fname_out,dpi=300)
+
+
             plt.close()
         else:
             plt.show()
@@ -1082,10 +1190,13 @@ class Calcium():
 
         return traces_bin
 
+    #
     def find_threshold_by_moment(self):
 
         #
         self.moment_values = np.ones(self.F_detrended.shape[0])
+
+        #
         for k in range(self.F_detrended.shape[0]):
             self.moment_values[k] = temp = scipy.stats.moment(self.F_detrended[k], moment=self.moment)
             
@@ -1095,17 +1206,28 @@ class Calcium():
 
         #
         try:
-            os.mkdir(os.path.join(self.data_dir,'figures'))
+            os.mkdir(os.path.join(self.root_dir,
+                              self.animal_id,
+                              str(self.session_name),
+                              'figures'))
         except:
             pass
 
+        #################################################
+        #################################################
+        #################################################
         #
-        fname_out = os.path.join(self.data_dir, 
+        fname_out = os.path.join(self.root_dir,
+                                self.animal_id, 
+                                str(self.session_name),
                                  'figures', 
                                  "moment_distributions.png")
-        # plot the distribution of moments
+        
+
+
         plt.figure(figsize=(10,10))
         temp = np.histogram(self.moment_values, bins=np.arange(0,0.1,0.001))
+
         plt.plot(temp[1][:-1], temp[0], label='Moment distribution')
         
         # plot moment thrshold as a vertical line
@@ -1128,11 +1250,13 @@ class Calcium():
         # here we loop over all sessions
         if self.session_id_toprocess=='a':
             
+            #
             for k in range(len(self.session_names)):
                 self.session_id = k
                 self.session_name = str(self.session_names[k])
 
                 self.binarize_fluorescence()
+
                 # generate standard randomized plots:
                 self.save_sample_traces()
                 self.show_rasters(True)
@@ -1145,71 +1269,46 @@ class Calcium():
             self.save_sample_traces()
             self.show_rasters(True)
 
-
-
     #
     def binarize_fluorescence(self):
 
         print ("")
         print ("BINARIZING: ", self.session_name)
+        
         #
-        if not self.data_dir:
+        if self.data_type=='2p':
+
+            # set paramatrs
+            self.set_default_parameters_2p()
+
+            #
+            if not self.data_dir:
+                self.data_dir = os.path.join(self.root_dir,
+                                            self.animal_id,
+                                            self.session_name,
+                                            'plane0')
+            # load suite2p data
+            self.load_suite2p()                      
+
+        #
+        elif self.data_type=='1p':
+
+            #
+            self.set_default_parameters_1p()
+
+            #
             self.data_dir = os.path.join(self.root_dir,
-                                        self.animal_id,
-                                        self.session_name,
-                                        'plane0')
+                                            self.animal_id,
+                                            #'plane0'
+                                            )
+            
+            #
+            self.load_inscopix()
+
         #
         fname_out = os.path.join(self.data_dir,
                                  'binarized_traces.npz'
                                  )
-        # load suite2p data
-        self.load_suite2p()                          
-
-
-        # ###############################################
-        # ##### PARAMETERS FOR RUNNING BINARIZATION #####
-        # ###############################################
-        # self.min_width_event_onphase = self.sample_rate//2 # set minimum withd of an onphase event; default: 0.5 seconds
-        # self.min_width_event_upphase = self.sample_rate//4 # set minimum width of upphase event; default: 0.25 seconds
-
-        # ############# PARAMTERS TO TWEAK ##############
-        # #     1. Cutoff for calling somthing a spike:
-        # #        This is stored in: std_Fluorescence_onphase/uppohase: defaults: 1.5
-        # #                                        higher -> less events; lower -> more events
-        # #                                        start at default and increase if data is very noisy and getting too many noise-events
-        # #c.min_thresh_std_onphase = 2.5      # set the minimum thrshold for onphase detection; defatul 2.5
-        # #c.min_thresh_std_upphase = 2.5      # set the minimum thershold for uppohase detection; default: 2.5
-
-        # #     2. Filter of [Ca] data which smooths the data significantly more and decreases number of binarzied events within a multi-second [Ca] event
-        # #        This is stored in high_cutoff: default 0.5 to 1.0
-        # #        The lower we set it the smoother our [Ca] traces and less "choppy" the binarized traces (but we loose some temporal precision)
-        # self.high_cutoff = 0.5              
-
-        # #     3. Removing bleaching and drift artifacts using polynomial fits
-        # #        This is stored in detrend_model_order
-        # self.detrend_model_order = 1 # 1-3 polynomial fit
-        # self.detrend_model_type = 'mode' # 'mode', 'polynomial'
-
-        # #
-        # self.mode_window = None #*30 # 120 seconds @ 30Hz 
-
-        # ################################################
-        # ########### RUN BINARIZATION STEP ##############
-        # ################################################
-        # # 
-        # # double check that we have set the STD thrshold at a reasonable level to catch biggest/highest SNR bursts
-        # self.parallel_flag = True
-        # self.use_upphase = True
-        # self.show_plots = False
-        # self.remove_ends = False                     # delete the first and last x seconds in case [ca] imaging had issues
-
-        # # how wide the window for computing physics model is; 
-        # self.mode_window = 30*30  # None: compute mode on entire time; Value: sliding window based - baseline detection # of frames to use to compute mode
-        # self.detrend_filter_threshold = 0.001 # this filters the data with a very low pass filter pre model fitting
-
-        # #
-        # self.min_width_event_onphase = 30
-        # self.min_width_event_upphase = 10
 
 
         #
@@ -1220,34 +1319,35 @@ class Calcium():
             ####################################################
 
             #
-            if self.verbose:
-                print ('')
-                print ("  Binarization parameters: ")
-                print ("        low pass filter low cuttoff: ", self.high_cutoff, "hz")
-                print ("        oasis_thresh_prefilter: ", self.oasis_thresh_prefilter)
-                print ("        min_thresh_std_oasis: ",  self.min_thresh_std_oasis)
-                print ("        min_thresh_std_onphase: ", self.min_thresh_std_onphase)
-                print ("        min_thresh_std_upphase: ", self.min_thresh_std_upphase)
-                print ("        min_width_event_onphase: ", self.min_width_event_onphase)
-                print ("        min_width_event_upphase: ", self.min_width_event_upphase)
-                print ("        min_width_event_oasis: ", self.min_width_event_oasis)
-                print ("        min_event_amplitude: ", self.min_event_amplitude)
+            # if self.verbose:
+            #     print ('')
+            #     print ("  Binarization parameters: ")
+            #     print ("        low pass filter low cuttoff: ", self.high_cutoff, "hz")
+            #     #print ("        oasis_thresh_prefilter: ", self.oasis_thresh_prefilter)
+            #     #print ("        min_thresh_std_oasis: ",  self.min_thresh_std_oasis)
+            #     print ("        min_thresh_std_onphase: ", self.min_thresh_std_onphase)
+            #     print ("        min_thresh_std_upphase: ", self.min_thresh_std_upphase)
+            #     print ("        min_width_event_onphase: ", self.min_width_event_onphase)
+            #     print ("        min_width_event_upphase: ", self.min_width_event_upphase)
+            #     print ("        min_width_event_oasis: ", self.min_width_event_oasis)
+            #     print ("        min_event_amplitude: ", self.min_event_amplitude)
 
 
             # compute DF/F on raw data, important to get correct SNR values
             # abs is required sometimes for inscopix data that returns baseline fixed data
             self.f0s = np.abs(np.median(self.F, axis=1))
-            try:
-                #FIXME: This will create an error if self.inscopix_flag is present and set to false
-                # , because no self.dff will be present
-                if self.inscopix_flag:
-                    self.dff = self.F
-                    self.dff = self.F-self.f0s[:,None]
-                else:
-                    self.dff = (self.F-self.f0s[:,None])/self.f0s[:,None]
-
-            except:
+            
+            #try:
+            # TODO: This will create an error if self.inscopix_flag is present and set to false
+            # , because no self.dff will be present
+            if self.data_type=='1p':
+                self.dff = self.F
+                self.dff = self.F-self.f0s[:,None]
+            else:
                 self.dff = (self.F-self.f0s[:,None])/self.f0s[:,None]
+
+            #except:
+            #    self.dff = (self.F-self.f0s[:,None])/self.f0s[:,None]
 
             # low pass filter data
             self.F_filtered = self.low_pass_filter(self.dff)
@@ -1462,9 +1562,21 @@ class Calcium():
         plt.ylabel("Neuron id")
         plt.xlabel("Time (sec)")
         plt.xlim(t[0], t[-1])
-        plt.title(self.data_dir)
+        plt.suptitle(self.root_dir+
+                     self.animal_id+
+                     str(self.session_name))
+        
         plt.suptitle("DFF PLOT (dashed lines are 50% DFF)")
-        plt.savefig(os.path.join(self.data_dir,'figures',"sample_traces.png"),dpi=300)
+
+        fname_out = os.path.join(self.root_dir,
+                            self.animal_id, 
+                            str(self.session_name),
+                            'figures', 
+                            "sample_traces.png")
+
+
+
+        plt.savefig(fname_out,dpi=300)
         plt.close()
 
         plt.figure(figsize=(25,12.5))
@@ -1492,14 +1604,30 @@ class Calcium():
             ctr += 1
 
         # plt.legend(fontsize=20)
-        plt.title(self.data_dir)
+        plt.suptitle(self.root_dir+
+                     self.animal_id+
+                     str(self.session_name))
+        
+        #
         plt.suptitle("Normalized Plots to max DFF (grey shading is std)")
         xticks = np.arange(0, ctr*spacing,spacing)
         plt.yticks(xticks, idx)
         plt.ylabel("Neuron id")
         plt.xlabel("Time (sec)")
         plt.xlim(t[0], t[-1])
-        plt.savefig(os.path.join(self.data_dir, 'figures', "sample_traces_normalized.png"), dpi=300)
+
+        #
+
+        fname_out = os.path.join(self.root_dir,
+                                 self.animal_id, 
+                                 str(self.session_name),
+                                 'figures', 
+                                 "sample_traces_normalized.png")
+
+
+        plt.savefig(fname_out, dpi=300)
+        
+        
         plt.close()
 
         #plt.show()
