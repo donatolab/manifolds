@@ -3253,6 +3253,7 @@ def compute_correlations_parallel(data_dir,
                     )
     else:
         for k in tqdm(ids, desc='computing intercell correlation'):
+            print(k)
             correlations_parallel2(k,
                                    c1)
 
