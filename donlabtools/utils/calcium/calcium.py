@@ -427,8 +427,8 @@ class Calcium():
             cumsum = cumsum/np.max(cumsum)
             idx = np.where(cumsum>=0.5)[0]
 
-            # take the first bin at which cumusm is > 0.5
-            argmax = idx[0]
+            # take the first bin at which cumusm is > 0.5 else None
+            argmax = idx[0] if len(idx)>0 else None
         std_global = y[1][argmax]
 
         return std_global
@@ -652,7 +652,7 @@ class Calcium():
 
     def detrend_traces(self, traces):
         traces_out = traces.copy()
-        t = np.arange(traces[0].shape[0])
+        t = np.arange(traces[0].shape[0]) if len(traces)>0 else None
         # print ("... TODO: automate the polynomial fit search using RMS optimization?!...")
         #
         for k in trange(traces.shape[0], desc='model filter: remove bleaching or trends', position=0, 
@@ -2099,6 +2099,12 @@ class Calcium():
     
     def make_correlation_dirs(self):
 
+        # Since i have no idea how to solve the problem with the missing wheel_flag i decided to do i like that
+        # You should look deeper into it
+        # Checking if variable wheel_flag is defined in locals or globals
+        if "wheel_flag" not in locals() and "wheel_flag" not in globals():
+            wheel_flag = False
+
         # select moving
         text = 'all_states'
         if self.subselect_moving_only and wheel_flag:
@@ -2121,7 +2127,7 @@ class Calcium():
         data_dir = os.path.join(data_dir, text)
         self.make_dir(data_dir)
 
-        # use the method to make anotehr dir
+        # use the method to make another dir
         if self.zscore:
             data_dir = os.path.join(data_dir,'zscore')
         else:
@@ -3245,7 +3251,7 @@ def pca_multi_sessions(data_dirs,
         #     continue
                    
         # initialize calcium object and load suite2p data
-        c = Calcium()
+        c = Calcium() #FIXME: this will probably break
         c.verbose = False                          # outputs additional information during processing
         c.recompute_binarization = False           # recomputes binarization and other processing steps; 
         c.data_dir = data_dir
