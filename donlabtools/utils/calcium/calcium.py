@@ -482,7 +482,14 @@ class Calcium():
             print ("         mean std over all cells : ", std_global)
 
     def compute_std_global(self, F):
-
+        """
+        This function calculates the global standard deviation of the input data F. 
+        The input F is a 2D numpy array where each row represents a trace. 
+        The function computes the standard deviation of each trace along axis 1 and returns the global standard deviation as the mean of the distribution of standard deviations.
+        
+        :param F: 2D numpy array of data
+        :return: float, global standard deviation of the input data
+        """
         #
         stds = np.std(F, axis=1)
 
@@ -733,6 +740,14 @@ class Calcium():
         return np.median(y, axis=1)
 
     def detrend_traces(self, traces):
+        """
+        This function detrends each trace in the input array by removing any linear or polynomial trend or mode from the data. 
+        The input traces is a 2D numpy array where each row represents a trace. 
+        The function returns a new array traces_out where each trace has been detrended using the parameters specified by the instance variables of the class.
+        
+        :param traces: 2D numpy array of traces
+        :return: 2D numpy array of detrended traces
+        """
         traces_out = traces.copy()
         t = np.arange(traces[0].shape[0]) if len(traces)>0 else None
         # print ("... TODO: automate the polynomial fit search using RMS optimization?!...")
@@ -2975,16 +2990,21 @@ def get_corr(temp1, temp2, zscore=False, n_tests=500):
 
 #
 def get_corr2(temp1, temp2, zscore, n_tests=1000):
-    # 
-    # check if all values are the same
-    if np.all(temp1==temp1[0]):
+    """
+    This function calculates the Pearson correlation coefficient between two arrays of data, temp1 and temp2. 
+    If zscore is True, the function also calculates the z-score of the correlation coefficient based on n_tests random shuffles of temp2.
+    
+    :param temp1: 1D numpy array of data
+    :param temp2: 1D numpy array of data
+    :param zscore: boolean, if True calculate z-score of correlation coefficient
+    :param n_tests: int, number of random shuffles to perform when calculating z-score (default=1000)
+    :return: tuple containing the Pearson correlation coefficient between temp1 and temp2, and the z-score of the correlation coefficient (if zscore=True) or np.nan (if zscore=False)
+    """
+    # check if all values are the same 
+    if len(np.unique(temp1))==1 or len(np.unique(temp2))==1:
         corr = [np.nan,1]
         return corr, [np.nan]
-
-    if np.all(temp2==temp2[0]):
-        corr = [np.nan,1]
-        return corr, [np.nan]
-
+    
     # if using dynamic correlation we need to compute the correlation for 1000 shuffles
     corr_original = scipy.stats.pearsonr(temp1, temp2)
 
@@ -3234,7 +3254,7 @@ def compute_correlations_parallel(data_dir,
     else:
         for k in tqdm(ids, desc='computing intercell correlation'):
             correlations_parallel2(k,
-                                  c1)
+                                   c1)
 
 
 #
