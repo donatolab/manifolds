@@ -3042,7 +3042,31 @@ def get_corr2(temp1, temp2, zscore, n_tests=1000, min_number_bursts=0):
 # this computes the correlation for a single cell against all others and then saves it to disk
 def correlations_parallel2(id, 
                            c1):
+    """
+    This function computes the correlation between different rasters in a parallelized manner.
 
+    Parameters:
+    id (int): The ID of the raster to be processed.
+    c1 (dict): A dictionary containing various parameters and data needed for the computation.
+
+    The dictionary 'c1' has the following keys:
+    - data_dir (str): The directory where the data is stored.
+    - rasters (np.array): The rasters to be processed.
+    - rasters_DFF (np.array): The rasters to be processed after applying DeltaF/F.
+    - binning_window (int): The size of the binning window.
+    - subsample (int): The subsampling rate.
+    - scale_by_DFF (bool): A flag indicating whether to scale by DeltaF/F.
+    - zscore (bool): A flag indicating whether to compute the z-score.
+    - n_tests (int): The number of tests to be performed.
+    - recompute_correlation (bool): A flag indicating whether to recompute the correlation.
+    - min_number_bursts (int): The minimum number of bursts required.
+
+    Returns:
+    None. The function saves the computed correlations to a .npz file in 'data_dir'.
+    
+    Note: If a file with the same name already exists in 'data_dir' and 'recompute_correlation' is False, 
+          the function will return without doing anything.
+    """
     # extract values from dicionary c1
     data_dir = c1["data_dir"]
     rasters = c1["rasters"]
