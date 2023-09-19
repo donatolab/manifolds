@@ -483,7 +483,14 @@ class Calcium():
             print ("         mean std over all cells : ", std_global)
 
     def compute_std_global(self, F):
-
+        """
+        This function calculates the global standard deviation of the input data F. 
+        The input F is a 2D numpy array where each row represents a trace. 
+        The function computes the standard deviation of each trace along axis 1 and returns the global standard deviation as the mean of the distribution of standard deviations.
+        
+        :param F: 2D numpy array of data
+        :return: float, global standard deviation of the input data
+        """
         #
         stds = np.std(F, axis=1)
 
@@ -509,8 +516,8 @@ class Calcium():
             cumsum = cumsum/np.max(cumsum)
             idx = np.where(cumsum>=0.5)[0]
 
-            # take the first bin at which cumusm is > 0.5
-            argmax = idx[0]
+            # take the first bin at which cumusm is > 0.5 else None
+            argmax = idx[0] if len(idx)>0 else None
         std_global = y[1][argmax]
 
         return std_global
@@ -735,8 +742,16 @@ class Calcium():
         return np.median(y, axis=1)
 
     def detrend_traces(self, traces):
+        """
+        This function detrends each trace in the input array by removing any linear or polynomial trend or mode from the data. 
+        The input traces is a 2D numpy array where each row represents a trace. 
+        The function returns a new array traces_out where each trace has been detrended using the parameters specified by the instance variables of the class.
+        
+        :param traces: 2D numpy array of traces
+        :return: 2D numpy array of detrended traces
+        """
         traces_out = traces.copy()
-        t = np.arange(traces[0].shape[0])
+        t = np.arange(traces[0].shape[0]) if len(traces)>0 else None
         # print ("... TODO: automate the polynomial fit search using RMS optimization?!...")
         #
         for k in trange(traces.shape[0], desc='model filter: remove bleaching or trends', position=0, 
@@ -2312,6 +2327,12 @@ class Calcium():
     
     def make_correlation_dirs(self):
 
+        # Since i have no idea how to solve the problem with the missing wheel_flag i decided to do i like that
+        # You should look deeper into it
+        # Checking if variable wheel_flag is defined in locals or globals
+        if "wheel_flag" not in locals() and "wheel_flag" not in globals():
+            wheel_flag = False
+
         # select moving
         text = 'all_states'
         if self.subselect_moving_only and wheel_flag:
@@ -2334,7 +2355,7 @@ class Calcium():
         data_dir = os.path.join(data_dir, text)
         self.make_dir(data_dir)
 
-        # use the method to make anotehr dir
+        # use the method to make another dir
         if self.zscore:
             data_dir = os.path.join(data_dir,'zscore')
         else:
@@ -2356,7 +2377,7 @@ class Calcium():
 
 
     #
-    def compute_correlations(self):
+    def compute_correlations(self, min_number_bursts=0):
 
         ############## COMPUTE CORRELATIONS ###################
 
@@ -2367,7 +2388,7 @@ class Calcium():
         # compute correlations between neurons
         rasters_DFF = self.dff   # use fluorescence filtered traces
         rasters = self.F_upphase_bin
-
+        self.min_number_bursts = min_number_bursts
         # here we shuffle data as a control
         if self.shuffle_data:
             rasters, rasters_DFF = self.shuffle_rasters(rasters, rasters_DFF)
@@ -2434,7 +2455,8 @@ class Calcium():
                                                     self.corr_parallel_flag,
                                                     self.zscore,
                                                     self.n_tests_zscore,
-                                                    self.recompute_correlation,)
+                                                    self.recompute_correlation,
+                                                    self.min_number_bursts)
 
     #
     def load_correlation_array(self):
@@ -3053,14 +3075,25 @@ def get_corr(temp1, temp2, zscore=False, n_tests=500):
     return corr
 
 #
-def get_corr2(temp1, temp2, zscore, n_tests=1000):
-    # 
-    # check if all values are the same
-    if np.all(temp1==temp1[0]):
+def get_corr2(temp1, temp2, zscore, n_tests=1000, min_number_bursts=0):
+    """
+    This function calculates the Pearson correlation coefficient between two arrays of data, temp1 and temp2. 
+    If zscore is True, the function also calculates the z-score of the correlation coefficient based on n_tests random shuffles of temp2.
+    
+    :param temp1: 1D numpy array of data
+    :param temp2: 1D numpy array of data
+    :param zscore: boolean, if True calculate z-score of correlation coefficient
+    :param n_tests: int, number of random shuffles to perform when calculating z-score (default=1000)
+    :param min_number_bursts: int, minimum number of bursts
+    :return: tuple containing the Pearson correlation coefficient between temp1 and temp2, and the z-score of the correlation coefficient (if zscore=True) or np.nan (if zscore=False)
+    """
+    # check if all values are the same 
+    if len(np.unique(temp1))==1 or len(np.unique(temp2))==1:
         corr = [np.nan,1]
         return corr, [np.nan]
-
-    if np.all(temp2==temp2[0]):
+    
+    # check if number bursts will be below self.min_num_bursts
+    if np.sum(temp1!=0)<min_number_bursts or np.sum(temp2!=0)<min_number_bursts:
         corr = [np.nan,1]
         return corr, [np.nan]
 
@@ -3087,14 +3120,38 @@ def get_corr2(temp1, temp2, zscore, n_tests=1000):
 
     else:
         corr_z = [np.nan]
-        
+
     return corr_original, corr_z
 
 
 # this computes the correlation for a single cell against all others and then saves it to disk
 def correlations_parallel2(id, 
                            c1):
+    """
+    This function computes the correlation between different rasters in a parallelized manner.
 
+    Parameters:
+    id (int): The ID of the raster to be processed.
+    c1 (dict): A dictionary containing various parameters and data needed for the computation.
+
+    The dictionary 'c1' has the following keys:
+    - data_dir (str): The directory where the data is stored.
+    - rasters (np.array): The rasters to be processed.
+    - rasters_DFF (np.array): The rasters to be processed after applying DeltaF/F.
+    - binning_window (int): The size of the binning window.
+    - subsample (int): The subsampling rate.
+    - scale_by_DFF (bool): A flag indicating whether to scale by DeltaF/F.
+    - zscore (bool): A flag indicating whether to compute the z-score.
+    - n_tests (int): The number of tests to be performed.
+    - recompute_correlation (bool): A flag indicating whether to recompute the correlation.
+    - min_number_bursts (int): The minimum number of bursts required.
+
+    Returns:
+    None. The function saves the computed correlations to a .npz file in 'data_dir'.
+    
+    Note: If a file with the same name already exists in 'data_dir' and 'recompute_correlation' is False, 
+          the function will return without doing anything.
+    """
     # extract values from dicionary c1
     data_dir = c1["data_dir"]
     rasters = c1["rasters"]
@@ -3105,6 +3162,7 @@ def correlations_parallel2(id,
     zscore = c1["zscore"]
     n_tests = c1["n_tests"]
     recompute_correlation = c1["recompute_correlation"]
+    min_number_bursts = c1["min_number_bursts"]
 
     # 
     fname_out = os.path.join(data_dir,
@@ -3148,14 +3206,13 @@ def correlations_parallel2(id,
             temp2 = np.array(tt)
         
         #
-        corr, corr_z = get_corr2(temp1, temp2, zscore, n_tests)
+        corr, corr_z = get_corr2(temp1, temp2, zscore, n_tests, min_number_bursts)
 
         # 
         corrs.append([id, p, corr[0], corr[1], corr_z[0]])
 
     #
     corrs = np.vstack(corrs)
-
     #
     np.savez(fname_out, 
              binning_window = binning_window,
@@ -3242,7 +3299,8 @@ def compute_correlations_parallel(data_dir,
                                   corr_parallel_flag=True,
                                   zscore=False,
                                   n_tests_zscore=1000,
-                                  recompute_correlation=False,):
+                                  recompute_correlation=False,
+                                  min_number_bursts=0):
 
     # 
 
@@ -3262,6 +3320,7 @@ def compute_correlations_parallel(data_dir,
     c1.rasters = rasters
     c1.rasters_DFF = rasters_DFF
     c1.recompute_correlation = recompute_correlation
+    c1.min_number_bursts = min_number_bursts
     
     #
     print ("... computing pairwise pearson correlation ...")
@@ -3313,7 +3372,7 @@ def compute_correlations_parallel(data_dir,
     else:
         for k in tqdm(ids, desc='computing intercell correlation'):
             correlations_parallel2(k,
-                                  c1)
+                                   c1)
 
 
 #
@@ -3458,7 +3517,7 @@ def pca_multi_sessions(data_dirs,
         #     continue
                    
         # initialize calcium object and load suite2p data
-        c = Calcium()
+        c = Calcium() #FIXME: this will probably break
         c.verbose = False                          # outputs additional information during processing
         c.recompute_binarization = False           # recomputes binarization and other processing steps; 
         c.data_dir = data_dir
