@@ -2292,7 +2292,7 @@ class Calcium():
 
 
     #
-    def compute_correlations(self):
+    def compute_correlations(self, min_number_bursts=0):
 
         ############## COMPUTE CORRELATIONS ###################
 
@@ -2303,7 +2303,7 @@ class Calcium():
         # compute correlations between neurons
         rasters_DFF = self.dff   # use fluorescence filtered traces
         rasters = self.F_upphase_bin
-
+        self.min_number_bursts = min_number_bursts
         # here we shuffle data as a control
         if self.shuffle_data:
             rasters, rasters_DFF = self.shuffle_rasters(rasters, rasters_DFF)
@@ -2370,7 +2370,8 @@ class Calcium():
                                                     self.corr_parallel_flag,
                                                     self.zscore,
                                                     self.n_tests_zscore,
-                                                    self.recompute_correlation,)
+                                                    self.recompute_correlation,
+                                                    self.min_number_bursts)
 
     #
     def load_correlation_array(self):
@@ -2989,7 +2990,7 @@ def get_corr(temp1, temp2, zscore=False, n_tests=500):
     return corr
 
 #
-def get_corr2(temp1, temp2, zscore, n_tests=1000):
+def get_corr2(temp1, temp2, zscore, n_tests=1000, min_number_bursts=0):
     """
     This function calculates the Pearson correlation coefficient between two arrays of data, temp1 and temp2. 
     If zscore is True, the function also calculates the z-score of the correlation coefficient based on n_tests random shuffles of temp2.
@@ -2998,6 +2999,7 @@ def get_corr2(temp1, temp2, zscore, n_tests=1000):
     :param temp2: 1D numpy array of data
     :param zscore: boolean, if True calculate z-score of correlation coefficient
     :param n_tests: int, number of random shuffles to perform when calculating z-score (default=1000)
+    :param min_number_bursts: int, minimum number of bursts
     :return: tuple containing the Pearson correlation coefficient between temp1 and temp2, and the z-score of the correlation coefficient (if zscore=True) or np.nan (if zscore=False)
     """
     # check if all values are the same 
@@ -3005,6 +3007,11 @@ def get_corr2(temp1, temp2, zscore, n_tests=1000):
         corr = [np.nan,1]
         return corr, [np.nan]
     
+    # check if number bursts will be below self.min_num_bursts
+    if np.sum(temp1!=0)<min_number_bursts or np.sum(temp2!=0)<min_number_bursts:
+        corr = [np.nan,1]
+        return corr, [np.nan]
+
     # if using dynamic correlation we need to compute the correlation for 1000 shuffles
     corr_original = scipy.stats.pearsonr(temp1, temp2)
 
@@ -3028,7 +3035,7 @@ def get_corr2(temp1, temp2, zscore, n_tests=1000):
 
     else:
         corr_z = [np.nan]
-        
+
     return corr_original, corr_z
 
 
@@ -3046,6 +3053,7 @@ def correlations_parallel2(id,
     zscore = c1["zscore"]
     n_tests = c1["n_tests"]
     recompute_correlation = c1["recompute_correlation"]
+    min_number_bursts = c1["min_number_bursts"]
 
     # 
     fname_out = os.path.join(data_dir,
@@ -3089,14 +3097,13 @@ def correlations_parallel2(id,
             temp2 = np.array(tt)
         
         #
-        corr, corr_z = get_corr2(temp1, temp2, zscore, n_tests)
+        corr, corr_z = get_corr2(temp1, temp2, zscore, n_tests, min_number_bursts)
 
         # 
         corrs.append([id, p, corr[0], corr[1], corr_z[0]])
 
     #
     corrs = np.vstack(corrs)
-
     #
     np.savez(fname_out, 
              binning_window = binning_window,
@@ -3183,7 +3190,8 @@ def compute_correlations_parallel(data_dir,
                                   corr_parallel_flag=True,
                                   zscore=False,
                                   n_tests_zscore=1000,
-                                  recompute_correlation=False,):
+                                  recompute_correlation=False,
+                                  min_number_bursts=0):
 
     # 
 
@@ -3203,6 +3211,7 @@ def compute_correlations_parallel(data_dir,
     c1.rasters = rasters
     c1.rasters_DFF = rasters_DFF
     c1.recompute_correlation = recompute_correlation
+    c1.min_number_bursts = min_number_bursts
     
     #
     print ("... computing pairwise pearson correlation ...")
@@ -3253,7 +3262,6 @@ def compute_correlations_parallel(data_dir,
                     )
     else:
         for k in tqdm(ids, desc='computing intercell correlation'):
-            print(k)
             correlations_parallel2(k,
                                    c1)
 
