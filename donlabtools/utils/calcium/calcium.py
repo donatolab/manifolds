@@ -3217,8 +3217,29 @@ def compute_correlations_parallel(data_dir,
                                   recompute_correlation=False,
                                   min_number_bursts=0):
 
-    # 
+    """
+    This function computes pairwise Pearson correlations between different rasters in a parallelized manner.
 
+    Parameters:
+    data_dir (str): The directory where the data is stored.
+    rasters (np.array): The rasters to be processed.
+    rasters_DFF (np.array): The rasters to be processed after applying DeltaF/F.
+    n_cores (int): The number of cores to be used for parallel processing.
+    binning_window (int, optional): The size of the binning window. Default is 30.
+    subsample (int, optional): The subsampling rate. Default is 5.
+    scale_by_DFF (bool, optional): A flag indicating whether to scale by DeltaF/F. Default is False.
+    corr_parallel_flag (bool, optional): A flag indicating whether to run the correlation computation in parallel. Default is True.
+    zscore (bool, optional): A flag indicating whether to compute the z-score. Default is False.
+    n_tests_zscore (int, optional): The number of tests to be performed for z-score computation. Default is 1000.
+    recompute_correlation (bool, optional): A flag indicating whether to recompute the correlation. Default is False.
+    min_number_bursts (int, optional): The minimum number of bursts required. Default is 0.
+
+    Returns:
+    None. The function saves the computed correlations to a .npz file in 'data_dir'.
+    
+    Note: If a file with the same name already exists in 'data_dir' and 'recompute_correlation' is False,
+          the function will return without doing anything.
+    """
     # make a small class to hold all the input variables
     class C:
         pass
