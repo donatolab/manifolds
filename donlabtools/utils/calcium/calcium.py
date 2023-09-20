@@ -4,6 +4,7 @@ from tqdm import trange, tqdm
 from scipy.signal import butter, lfilter, freqz, filtfilt
 import matplotlib.pyplot as plt
 import yaml
+import glob
 
 # from tsnecuda import TSNE
 # import umap
@@ -523,6 +524,7 @@ class Calcium():
 
     #
     def load_inscopix(self):
+
 
         from numpy import genfromtxt
         data = genfromtxt(self.fname_inscopix, delimiter=',', dtype='str')
@@ -1302,6 +1304,8 @@ class Calcium():
                                             self.animal_id,
                                             self.session_name,
                                             'plane0')
+                
+
             # load suite2p data
             self.load_suite2p()                      
 
@@ -1312,11 +1316,17 @@ class Calcium():
             self.set_default_parameters_1p()
 
             #
+            print ("self.session_name: ", self.session_name)
             self.data_dir = os.path.join(self.root_dir,
                                             self.animal_id,
-                                            #'plane0'
+                                            str(self.session_name)
                                             )
-            
+            # use glob wild card to grab the .csv file from the directory
+            #temp_loc = 
+            self.fname_inscopix = glob.glob(os.path.join(self.data_dir,
+                                                            '*.csv'))[0]
+
+
             #
             self.load_inscopix()
 
@@ -1496,6 +1506,40 @@ class Calcium():
                      min_event_amplitude=self.min_event_amplitude,
                      DFF = self.dff
                      )
+                
+                # same but use self.fname_inscopix as the name of the file
+                if self.data_type=='1p':
+                    np.savez(self.fname_inscopix.replace('.csv','_binarized_traces.npz'),
+                        # binarization data
+                        F_raw = self.F,
+                        F_filtered = self.F_filtered_saved,
+                        F_detrended = self.F_detrended,
+                        F_processed = self.F_filtered,
+                        F_onphase=self.F_onphase_bin,
+                        F_upphase=self.F_upphase_bin,
+                        stds = self.stds,
+                        derivative = self.der,
+                        der_min_slope = self.der_min_slope,
+                        spks=self.spks,
+                        spks_smooth_upphase=self.spks_smooth_bin,
+                        high_cutoff = self.high_cutoff,
+                        low_cutoff = self.low_cutoff,
+                        detrend_model_order= self.detrend_model_order,
+
+                        #
+                        oasis_x_F = self.spks_x_F,
+                        # parameters saved to file as dictionary
+                        oasis_thresh_prefilter=self.oasis_thresh_prefilter,
+                        min_thresh_std_oasis=self.min_thresh_std_oasis,
+                        min_thresh_std_onphase=self.min_thresh_std_onphase,
+                        min_thresh_std_upphase=self.min_thresh_std_upphase,
+                        min_width_event_onphase=self.min_width_event_onphase,
+                        min_width_event_upphase=self.min_width_event_upphase,
+                        min_width_event_oasis=self.min_width_event_oasis,
+                        min_event_amplitude=self.min_event_amplitude,
+                        DFF = self.dff
+                        )
+
 
             #
             if self.save_matlab:
@@ -1540,6 +1584,47 @@ class Calcium():
                      "min_event_amplitude":self.min_event_amplitude,
                       }
                                  )
+                
+                if self.data_type=='1p':
+                    scipy.io.savemat(self.fname_inscopix.replace('.csv','_binarized_traces.mat'),
+                        # binarization data
+                        {""
+                        "F_onphase":self.F_onphase_bin,
+                        "F_upphase":self.F_upphase_bin,
+                        "spks":self.spks,
+                        "spks_smooth_upphase":self.spks_smooth_bin,
+                        #"stds": self.stds,
+                        "derivative":  self.der,
+                        "der_min_slope": self.der_min_slope,
+
+                        # binarization data
+                        "F_raw": self.F,
+
+                        "F_detrended": self.F_detrended,
+
+                        "spks":self.spks,
+                        "high_cutoff": self.high_cutoff,
+                        "low_cutoff": self.low_cutoff,
+                        "detrend_model_order": self.detrend_model_order,
+
+                        # parameters saved to file as dictionary
+                        "DFF": self.dff,
+
+                        # raw and filtered data;
+                        "F_filtered":self.F_filtered_saved,
+                        "oasis_x_F": self.spks_x_F,
+
+                        # parameters saved to file as dictionary
+                        "oasis_thresh_prefilter":self.oasis_thresh_prefilter,
+                        "min_thresh_std_oasis":self.min_thresh_std_oasis,
+                        "min_thresh_std_onphase":self.min_thresh_std_onphase,
+                        "min_thresh_std_uphase":self.min_thresh_std_upphase,
+                        "min_width_event_onphase":self.min_width_event_onphase,
+                        "min_width_event_upphase":self.min_width_event_upphase,
+                        "min_width_event_oasis":self.min_width_event_oasis,
+                        "min_event_amplitude":self.min_event_amplitude,
+                        }
+                                    ) 
 
     def save_sample_traces(self, spacing = 10, scale = 15):
 
