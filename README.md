@@ -16,7 +16,7 @@ The code snippets corresponding to the numbers are found below. Copy all lines a
 ```bash
 conda create -n manifolds python=3.8;
 conda activate manifolds;
-pip install matplotlib numpy scipy tqdm scikit-learn parmap networkx pandas opencv-python;
+pip install matplotlib numpy scipy tqdm scikit-learn parmap networkx pandas opencv-python pyyaml;
 pip install jupyter
 ```
 
@@ -27,7 +27,7 @@ pip install jupyter
 
 ![GitHub Download Zip](https://camo.githubusercontent.com/3aa5742481d5d286ecfa18e2f716e008d144f72fb4988919d65db05e83636ae0/68747470733a2f2f692e6962622e636f2f334d3543584b6d2f636c6f6e652d7a69702e706e67)
 
-2. Start jupyer notebook by typing it in at the command line
+2. Start jupyter notebook by typing it in at the command line
 
 ```bash
 jupyter lab

@@ -172,7 +172,7 @@ class Calcium():
         with open(yaml_file) as file:
             #
             data = yaml.load(file, Loader=yaml.FullLoader)
-            self.session_names = data['session_names']
+            self.session_names = [str(session_name) if type(session_name)!=str else session_name for session_name in data['session_names']]
 
         if not session_name:
             #
@@ -191,7 +191,8 @@ class Calcium():
                 print(f"Processing sesssion: {self.session_names[int(user_input)]}")
             print ("")
         else:
-            user_input = self.session_names.index(session_name)
+            user_input = "merged" if session_name=="merged" else self.session_names.index(session_name)
+             
         #
         self.session_id_toprocess = user_input
 
@@ -1279,7 +1280,7 @@ class Calcium():
                 self.show_rasters(True)
         #
         else:
-            self.session_name = self.session_names[int(self.session_id_toprocess)]
+            self.session_name = "merged" if self.session_id_toprocess=="merged" else self.session_names[int(self.session_id_toprocess)]
             self.binarize_fluorescence()
 
             # generate standard randomized plots:
@@ -1412,7 +1413,8 @@ class Calcium():
                                             self.dff_min,
                                             self.maximum_std_of_signal,
                                             pm_processes = 16,
-                                            pm_pbar=True)
+                                            pm_pbar=True,
+                                            parallel=True)
             else:
                 self.thresholds = []
                 for l in tqdm(ll):
