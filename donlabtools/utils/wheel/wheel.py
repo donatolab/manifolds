@@ -227,7 +227,7 @@ class Wheel():
                 #
                 click = self.track.rotary_binarized.values[id_]  # can be +/- 1
 
-                #
+                # delta distance / delta time
                 v[id_] = (click*click_distance ) /((id_ -last_time_idx ) /self.sample_rate)
 
                 #

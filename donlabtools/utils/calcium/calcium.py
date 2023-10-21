@@ -140,7 +140,6 @@ class Calcium():
         self.recompute = False
 
         #
-        self.parallel = True
         self.n_cores = 16
 
         # check if some of the cells have 0-std in which case they should be removed
@@ -151,7 +150,7 @@ class Calcium():
         
     #
     def load_yaml_file(self, session_name=None):
-
+        session_name = str(session_name) if type(session_name)!=str else session_name
         # load yaml file
         yaml_file = os.path.join(self.root_dir,
                                 self.animal_id,
@@ -172,7 +171,10 @@ class Calcium():
         with open(yaml_file) as file:
             #
             data = yaml.load(file, Loader=yaml.FullLoader)
-            self.session_names = [str(session_name) if type(session_name)!=str else session_name for session_name in data['session_names']]
+            if 'session_names' not in data.keys():
+                self.session_names = [session_name]
+            else:
+                self.session_names = [str(sess_name) if type(sess_name)!=str else sess_name for sess_name in data['session_names']]
 
         if not session_name:
             #
@@ -755,7 +757,10 @@ class Calcium():
         t = np.arange(traces[0].shape[0]) if len(traces)>0 else None
         # print ("... TODO: automate the polynomial fit search using RMS optimization?!...")
         #
-        for k in trange(traces.shape[0], desc='model filter: remove bleaching or trends', position=0, 
+        #TODO: prallelize
+        for k in trange(traces.shape[0], 
+                        desc='model filter: remove bleaching or trends', 
+                        position=0, 
                         leave=True):
             #
             temp = traces[k]
