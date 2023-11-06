@@ -2384,7 +2384,8 @@ class Calcium():
 
 
     #
-    def compute_correlations(self, min_number_bursts=0):
+    def compute_correlations(self, min_number_bursts=0, 
+                             session_part=""):
 
         ############## COMPUTE CORRELATIONS ###################
 
@@ -2411,10 +2412,10 @@ class Calcium():
             w.root_dir = os.path.join(self.root_dir,
                                         self.animal_id,
                                         self.session,
-                                        'TRD-2P')       
-            w.load_track()
+                                        'TRD-2P')
+            w.load_track(session_part=session_part)
             
-            w.compute_velocity()
+            w.compute_velocity(session_part=session_part) #FIXME: this should be changed to new problem
             
             # 
             w.max_velocity_quiescent = 0.005  # in metres per second
