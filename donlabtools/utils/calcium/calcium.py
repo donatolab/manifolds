@@ -49,6 +49,18 @@ sys.path.append(module_path)
 
 #
 def butter_highpass(cutoff, fs, order=5):
+    """
+    Design a highpass Butterworth filter.
+
+    Parameters:
+        cutoff (float): The cutoff frequency in Hertz.
+        fs (float): The sampling frequency in Hertz.
+        order (int, optional): The filter order. Defaults to 5.
+
+    Returns:
+        b (array-like): Numerator (zeros) coefficients of the filter.
+        a (array-like): Denominator (poles) coefficients of the filter.
+    """
     nyq = 0.5 * fs
     normal_cutoff = cutoff / nyq
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
@@ -56,12 +68,37 @@ def butter_highpass(cutoff, fs, order=5):
 
 #
 def butter_highpass_filter(data, cutoff, fs, order=5):
+    """
+    Apply a highpass Butterworth filter to the input data.
+
+    Parameters:
+        data (array-like): The input data to filter.
+        cutoff (float): The cutoff frequency in Hertz.
+        fs (float): The sampling frequency in Hertz.
+        order (int, optional): The filter order. Defaults to 5.
+
+    Returns:
+        y (array-like): The filtered output data.
+    """
     b, a = butter_highpass(cutoff, fs, order=order)
     y = filtfilt(b, a, data)
     return y
 
 #
 def butter_lowpass(cutoff, fs, order=5):
+    """
+    Design a lowpass Butterworth filter.
+
+    Parameters:
+        cutoff (float): The cutoff frequency in Hertz.
+        fs (float): The sampling frequency in Hertz.
+        order (int, optional): The filter order. Defaults to 5.
+
+    Returns:
+        b (array-like): Numerator (zeros) coefficients of the filter.
+        a (array-like): Denominator (poles) coefficients of the filter.
+    """
+
     nyq = 0.5 * fs
     normal_cutoff = cutoff / nyq
     b, a = butter(order, normal_cutoff, btype='low', analog=False)
@@ -69,11 +106,35 @@ def butter_lowpass(cutoff, fs, order=5):
 
 #
 def butter_lowpass_filter(data, cutoff, fs, order=5):
+    """
+    Apply a lowpass Butterworth filter to the input data.
+
+    Parameters:
+        data (array-like): The input data to filter.
+        cutoff (float): The cutoff frequency in Hertz.
+        fs (float): The sampling frequency in Hertz.
+        order (int, optional): The filter order. Defaults to 5.
+
+    Returns:
+        y (array-like): The filtered output data.
+    """
     b, a = butter_lowpass(cutoff, fs, order=order)
     y = filtfilt(b, a, data)
     return y
 
 def butter_bandpass(lowcut, highcut, fs, order=5):
+    """
+    Design a bandpass Butterworth filter.
+
+    Parameters:
+        lowcut (float): The lower cutoff frequency in Hertz.
+        highcut (float): The upper cutoff frequency in Hertz.
+        fs (float): The sampling frequency in Hertz.
+        order (int, optional): The filter order. Defaults to 5.
+
+    Returns:
+        sos (array-like): Second-order sections (SOS) coefficients of the filter.
+    """
     nyq = 0.5 * fs
     low = lowcut / nyq
     high = highcut / nyq
@@ -81,8 +142,20 @@ def butter_bandpass(lowcut, highcut, fs, order=5):
     #b, a = scipy.signal.cheby1(order, [low, high], btype='band')
     return sos
 
-
 def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+    """
+    Apply a bandpass Butterworth filter to the input data.
+
+    Parameters:
+        data (array-like): The input data to filter.
+        lowcut (float): The lower cutoff frequency in Hertz.
+        highcut (float): The upper cutoff frequency in Hertz.
+        fs (float): The sampling frequency in Hertz.
+        order (int, optional): The filter order. Defaults to 5.
+
+    Returns:
+        y (array-like): The filtered output data.
+    """
     sos = butter_bandpass(lowcut, highcut, fs, order=order)
     y = sosfilt(sos, data)
     return y
