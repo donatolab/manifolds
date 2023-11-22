@@ -420,13 +420,13 @@ class Calcium():
         #self.data_dir = os.path.split(fname)[0]
         
         # Set dynamic threshold for binarization using percentile of fluorescence fit to mode
-        self.dff_min = 0.1                     # set the minimum dff value to be considered an event; required for weird negative dff values
+        #self.dff_min = 0.1                     # set the minimum dff value to be considered an event; required for weird negative dff values
                                             #   that sometimes come out of inscopix data
         self.show_plots = True
-        self.percentile_threshold = 0.99999
+        #self.percentile_threshold = 0.99999
         self.use_upphase = True
         self.parallel_flag = True
-        self.maximum_std_of_signal = 0.03
+        #self.maximum_std_of_signal = 0.03
 
         # these are paramters for inscopix which returns weird distributions
         self.moment = 2
@@ -501,6 +501,10 @@ class Calcium():
         
     #
     def load_suite2p(self):
+        
+        #
+        remove_bad_cells=self.remove_bad_cells
+        
         #print ('')
         #print ('')
         suffix1 = 'suite2p'
@@ -535,12 +539,13 @@ class Calcium():
         ################## REMOVE NON-CELLS ########################
         ############################################################
         #
-        idx = np.where(self.iscell[:,0]==1)[0]
-        self.F = self.F[idx]
-        self.Fneu = self.Fneu[idx]
+        if remove_bad_cells:
+            idx = np.where(self.iscell[:,0]==1)[0]
+            self.F = self.F[idx]
+            self.Fneu = self.Fneu[idx]
 
-        self.spks = self.spks[idx]
-        self.stat = self.stat[idx]
+            self.spks = self.spks[idx]
+            self.stat = self.stat[idx]
 
         #############################################################
         ########### COMPUTE GLOBAL MEAN - REMOVE MEAN ###############
@@ -1198,13 +1203,13 @@ class Calcium():
 
         #################
         if save_image==True:
-
+            
+            #
+            data_dir_local = os.path.join(self.data_dir,
+                                        'figures')
 #
             try:
-                os.mkdir(os.path.join(self.root_dir,
-                                self.animal_id,
-                                str(self.session_name),
-                                'figures'))
+                os.mkdir(data_dir_local)
             except:
                 pass
 
@@ -1212,10 +1217,7 @@ class Calcium():
             #################################################
             #################################################
             #
-            fname_out = os.path.join(self.root_dir,
-                                    self.animal_id, 
-                                    str(self.session_name),
-                                    'figures', 
+            fname_out = os.path.join(data_dir_local, 
                                     "rasters.png")
         
             plt.savefig(fname_out,dpi=300)
@@ -1708,8 +1710,9 @@ class Calcium():
 
     def save_sample_traces(self, spacing = 10, scale = 15):
 
+        data_dir_local = os.path.join(self.data_dir,'figures')
         try:
-            os.mkdir(os.path.join(self.data_dir,'figures'))
+            os.mkdir(data_dir_local)
         except:
             pass
 
@@ -1748,11 +1751,8 @@ class Calcium():
         
         plt.suptitle("DFF PLOT (dashed lines are 50% DFF)")
 
-        fname_out = os.path.join(self.root_dir,
-                            self.animal_id, 
-                            str(self.session_name),
-                            'figures', 
-                            "sample_traces.png")
+        fname_out = os.path.join(data_dir_local, 
+                                "sample_traces.png")
 
 
 
@@ -1798,10 +1798,7 @@ class Calcium():
 
         #
 
-        fname_out = os.path.join(self.root_dir,
-                                 self.animal_id, 
-                                 str(self.session_name),
-                                 'figures', 
+        fname_out = os.path.join(data_dir_local, 
                                  "sample_traces_normalized.png")
 
 

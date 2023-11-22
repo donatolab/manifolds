@@ -11,11 +11,11 @@ pd.set_option('display.width', None)
 pd.set_option('display.max_colwidth', -1)
 
 import os
-os.chdir('/home/cat/code/manifolds/')
+os.chdir('/home/cat/code/donatolab/donlabtools/utils')
 
 from calcium import calcium
 from wheel import wheel
-from visualize import visualize
+#from visualize import visualize
 from tqdm import trange
 
 from scipy.io import loadmat
